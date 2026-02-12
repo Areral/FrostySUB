@@ -1,0 +1,44 @@
+name: Auto-Update Proxy Subscription
+
+on:
+  schedule:
+    # Запуск каждые 30 минут
+    - cron: '*/30 * * * *'
+  workflow_dispatch: # Ручной запуск
+
+jobs:
+  update-proxies:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Разрешаем пушить изменения в репо
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: 📦 Install Dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: 🚀 Run Bot
+        run: |
+          python core/bot.py
+
+      - name: 💾 Commit and Push Changes
+        run: |
+          git config --global user.name "ProxyBot Action"
+          git config --global user.email "actions@github.com"
+          
+          # Проверяем статус файлов
+          git add subscription.txt
+          
+          # Если есть изменения, коммитим. Если нет - выходим без ошибки.
+          timestamp=$(date -u)
+          git commit -m "🚀 Auto-update: $timestamp" || exit 0
+          git push
