@@ -1,20 +1,24 @@
-name: Update Proxy List
+name: 🚀 Proxy Sub Update
+
+# Описание: Автоматическое обновление подписки Frosty XC.
+# Запускается по расписанию и проверяет работоспособность каждого узла через Sing-box.
 
 on:
   schedule:
-    # Запуск каждые 60 минут
-    - cron: '0 * * * *'
-  workflow_dispatch: # Кнопка для ручного запуска
-
-permissions:
-  contents: write
+    # Запуск каждые 30 минут
+    - cron: '*/30 * * * *'
+  workflow_dispatch: # Позволяет запускать вручную кнопкой в интерфейсе GitHub
 
 jobs:
-  build:
+  update-subscription:
     runs-on: ubuntu-latest
+    timeout-minutes: 15 # Ограничение времени выполнения
     
+    permissions:
+      contents: write # Разрешение на запись файлов в репозиторий
+
     steps:
-      - name: 📥 Checkout Code
+      - name: 📥 Checkout Repository
         uses: actions/checkout@v4
 
       - name: 🐍 Set up Python
@@ -23,20 +27,37 @@ jobs:
           python-version: '3.10'
           cache: 'pip'
 
-      - name: 📦 Install Requirements
+      - name: 📦 Install Python Dependencies
         run: |
-          pip install -r requirements.txt
+          python -m pip install --upgrade pip
+          # Установка необходимых библиотек: 
+          # aiohttp - для запросов, aiohttp_socks - для работы через прокси
+          pip install aiohttp aiohttp_socks
 
-      - name: 🚀 Run Bot
+      - name: 🛠 Install Sing-box
         run: |
-          python core/bot.py
+          # Скачиваем и устанавливаем сетевое ядро Sing-box (последнюю версию)
+          # Это необходимо для того, чтобы Python мог подключаться к Reality/VLESS узлам
+          sudo bash -c "$(curl -L https://sing-box.app/install.sh)"
+          sing-box version
 
-      - name: 💾 Commit & Push
+      - name: 🚀 Run Proxy Validation Bot
+        # Запускаем основной скрипт. В процессе работы он будет 
+        # поднимать временные туннели и проверять реальный IP прокси.
+        run: python core/bot.py
+
+      - name: 💾 Commit and Push Changes
         run: |
-          git config --global user.name "ProxyBot"
+          # Настройка данных бота для коммита
+          git config --global user.name "Frosty-Bot"
           git config --global user.email "bot@github.com"
+          
+          # Проверяем, изменился ли файл subscription.txt
           git add subscription.txt
           
-          # Если есть изменения — коммитим, если нет — не падаем с ошибкой
-          git commit -m "🚀 Auto-update $(date -u)" || exit 0
+          # Если изменений нет, git commit выдаст ошибку, поэтому используем || exit 0
+          timestamp=$(date -u +'%Y-%m-%d %H:%M:%S UTC')
+          git commit -m "🔄 Auto-update: $timestamp [skip ci]" || exit 0
+          
+          # Отправка изменений в ветку main
           git push
