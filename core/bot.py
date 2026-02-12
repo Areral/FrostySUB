@@ -11,6 +11,7 @@ import urllib.parse
 import sys
 import datetime
 import random
+import socket
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
@@ -21,20 +22,25 @@ CONFIG = {
     "SOURCES_FILE": "config/sources.txt",
     "OUTPUT_FILE": "subscription.txt",
     
-    # Заголовок подписки
     "SUB_TITLE": "_ _ _By Frosty XC_ _ _",
     
-    "TIMEOUT": 10,
-    "MAX_LATENCY": 2000,
+    "TIMEOUT": 10,       # Таймаут на подключение
+    "MAX_LATENCY": 2000, # Максимальный пинг
+    "PING_THREADS": 40,  # Пинг делаем быстро и много
     
-    # Снижаем кол-во потоков, чтобы GeoAPI не банил нас и не выдавал "Индию"
-    "MAX_CONCURRENT": 10, 
+    # 🌍 ВАЖНО: Список ручных исправлений
+    # Если бот все равно ошибается, впишите часть домена и нужный код сюда
+    "MANUAL_OVERRIDES": {
+        "ge.spectrum.vu": "DE",
+        "de.spectrum.vu": "DE",
+        ".ru": "RU",
+        ".de": "DE"
+    },
     
-    # Список API. ipwho.is стоит первым, так как он лояльнее к запросам
+    # API используем по очереди
     "GEO_APIS": [
         "https://ipwho.is/{ip}",
-        "http://ip-api.com/json/{ip}?fields=status,country,countryCode",
-        "https://api.dtech.lol/ip/{ip}"
+        "http://ip-api.com/json/{ip}?fields=status,country,countryCode"
     ],
     
     "USER_AGENT": "v2rayNG/1.8.5 (Linux; Android 13; K)"
@@ -44,7 +50,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s | %(message)s', date
 logger = logging.getLogger("Bot")
 
 # ===========================
-# 📦 КЛАССЫ И УТИЛИТЫ
+# 📦 КЛАССЫ
 # ===========================
 
 @dataclass
@@ -58,6 +64,7 @@ class ProxyNode:
     country_code: str = "UN"
     country_name: str = "Unknown"
     latency: float = 9999.0
+    ip_resolved: str = "" # Сюда сохраним реальный IP
 
 class Utils:
     @staticmethod
@@ -67,8 +74,8 @@ class Utils:
         if "://" in text: return text
         try:
             text = text.replace('-', '+').replace('_', '/')
-            padding = len(text) % 4
-            if padding: text += '=' * (4 - padding)
+            pad = len(text) % 4
+            if pad: text += '=' * (4 - pad)
             return base64.b64decode(text).decode('utf-8', 'ignore')
         except: return text
 
@@ -89,14 +96,13 @@ class Utils:
         return target
 
     @staticmethod
-    def create_info_node(text: str) -> str:
-        """Создает заголовок (фейковый VMESS)"""
-        dummy_data = {
+    def create_header(text: str) -> str:
+        dummy = {
             "v": "2", "ps": text, "add": "127.0.0.1", "port": "1080",
             "id": "ffffffff-ffff-ffff-ffff-ffffffffffff",
-            "aid": "0", "net": "tcp", "type": "none", "host": "", "path": "", "tls": ""
+            "net": "tcp", "type": "none"
         }
-        return "vmess://" + Utils.encode_base64(json.dumps(dummy_data))
+        return "vmess://" + Utils.encode_base64(json.dumps(dummy))
 
 # ===========================
 # 🧠 ЛОГИКА
@@ -124,121 +130,122 @@ class Bot:
                             for line in decoded.splitlines():
                                 if "://" in line: links.append(line.strip())
                             logger.info(f"📥 {url} -> OK")
-                except Exception as e:
-                    logger.warning(f"Ошибка источника {url}: {e}")
+                except: pass
         return list(set(links))
 
-    async def resolve_geo(self, ip: str, session: aiohttp.ClientSession) -> Tuple[str, str]:
-        if ip in self.geo_cache: return self.geo_cache[ip]
-
-        # ⚡️ JITTER: Случайная задержка 0.1-0.5 сек перед запросом к API.
-        # Это решает проблему блокировки и выдачи "Индии" (IP раннера)
-        await asyncio.sleep(random.uniform(0.1, 0.5))
-
-        for api_tpl in CONFIG["GEO_APIS"]:
-            try:
-                url = api_tpl.format(ip=ip)
-                async with session.get(url, timeout=5, ssl=False) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        
-                        # Проверка: не вернул ли API ошибку
-                        if 'status' in data and data['status'] == 'fail':
-                            continue
-
-                        cc = data.get('countryCode') or data.get('country_code') or 'UN'
-                        cn = data.get('country') or data.get('country_name') or 'Unknown'
-                        
-                        if cc and cc not in ['UN', 'XX']:
-                            self.geo_cache[ip] = (cc, cn)
-                            return cc, cn
-            except: continue
-        
-        return "UN", "Unknown"
-
-    async def check_proxy(self, raw_link: str, session: aiohttp.ClientSession) -> Optional[ProxyNode]:
-        node = None
+    # --- 1. ПИНГЕР (БЫСТРО, ПАРАЛЛЕЛЬНО) ---
+    async def ping_node(self, node: ProxyNode) -> Optional[ProxyNode]:
         try:
-            # Парсинг
-            if raw_link.startswith("vless://"):
-                p = urllib.parse.urlparse(raw_link)
-                q = urllib.parse.parse_qs(p.query)
-                node = ProxyNode(
-                    raw_uri=raw_link, 
-                    protocol="VLESS", 
-                    address=p.hostname, 
-                    port=p.port, 
-                    sni=q.get('sni',[''])[0], 
-                    host=q.get('host',[''])[0]
-                )
-            elif raw_link.startswith("vmess://"):
-                d = json.loads(Utils.decode_base64(raw_link[8:]))
-                node = ProxyNode(
-                    raw_uri=raw_link, 
-                    protocol="VMESS", 
-                    address=d['add'], 
-                    port=int(d['port']), 
-                    sni=d.get('sni','') or d.get('host',''), 
-                    host=d.get('host','')
-                )
-            
-            if not node: return None
+            # Сначала пытаемся разрешить DNS, чтобы узнать реальный IP
+            # Это пригодится для GeoIP, чтобы не спрашивать у API домен
+            loop = asyncio.get_running_loop()
+            try:
+                # В Linux/Docker это работает быстро
+                ip = await loop.run_in_executor(None, socket.gethostbyname, node.address)
+                node.ip_resolved = ip
+            except:
+                node.ip_resolved = node.address # Если не вышло, оставляем как есть
 
-            # 1. Пинг
             t0 = time.perf_counter()
             fut = asyncio.open_connection(node.address, node.port)
             r, w = await asyncio.wait_for(fut, timeout=CONFIG["TIMEOUT"])
             w.close()
             await w.wait_closed()
             node.latency = (time.perf_counter() - t0) * 1000
-
-            if node.latency > CONFIG["MAX_LATENCY"]: return None
-
-            # 2. GeoIP (только если порт открыт)
-            node.country_code, node.country_name = await self.resolve_geo(node.address, session)
+            
             return node
+        except:
+            return None
 
-        except: return None
+    # --- 2. ГЕОЛОКАТОР (МЕДЛЕННО, ПОСЛЕДОВАТЕЛЬНО) ---
+    async def resolve_geo_sequential(self, node: ProxyNode, session: aiohttp.ClientSession):
+        # 1. Проверка ручных правил (MANUAL_OVERRIDES)
+        for key, val in CONFIG["MANUAL_OVERRIDES"].items():
+            if key in node.address:
+                node.country_code = val
+                return
+
+        target = node.ip_resolved if node.ip_resolved else node.address
+        
+        if target in self.geo_cache:
+            node.country_code = self.geo_cache[target]
+            return
+
+        # 2. Запрос к API (строго по одному)
+        for api_tpl in CONFIG["GEO_APIS"]:
+            try:
+                # Небольшая пауза, чтобы API не забанил за спам
+                await asyncio.sleep(0.2) 
+                
+                url = api_tpl.format(ip=target)
+                async with session.get(url, timeout=5, ssl=False) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        cc = data.get('countryCode') or data.get('country_code')
+                        
+                        if cc and cc not in ['UN', 'XX']:
+                            self.geo_cache[target] = cc
+                            node.country_code = cc
+                            return # Успех
+            except: continue
+        
+        # Если ничего не помогло
+        node.country_code = "UN"
 
     async def run(self):
-        logger.info("🚀 Запуск...")
+        logger.info("🚀 START...")
         raw_links = await self.fetch_links()
         
-        valid_nodes = []
-        sem = asyncio.Semaphore(CONFIG["MAX_CONCURRENT"])
+        # --- ЭТАП 1: ПАРСИНГ ---
+        nodes = []
+        for l in raw_links:
+            try:
+                if l.startswith("vless://"):
+                    p = urllib.parse.urlparse(l)
+                    q = urllib.parse.parse_qs(p.query)
+                    nodes.append(ProxyNode(l, "VLESS", p.hostname, p.port, q.get('sni',[''])[0], q.get('host',[''])[0]))
+                elif l.startswith("vmess://"):
+                    d = json.loads(Utils.decode_base64(l[8:]))
+                    nodes.append(ProxyNode(l, "VMESS", d['add'], int(d['port']), d.get('sni','') or d.get('host',''), d.get('host','')))
+            except: pass
 
-        async with aiohttp.ClientSession() as session:
-            async def worker(link):
-                async with sem:
-                    return await self.check_proxy(link, session)
-            
-            tasks = [worker(l) for l in raw_links]
-            results = await asyncio.gather(*tasks)
-            valid_nodes = [r for r in results if r]
-
-        # Сортировка: сначала быстрые
-        valid_nodes.sort(key=lambda x: x.latency)
-        logger.info(f"✅ Живых: {len(valid_nodes)}")
-
-        final_lines = []
-
-        # === ЗАГОЛОВКИ ===
-        # 1. Название подписки
-        header_title = f"ℹ️ {CONFIG['SUB_TITLE']}"
-        final_lines.append(Utils.create_info_node(header_title))
+        # --- ЭТАП 2: МАССОВЫЙ ПИНГ ---
+        alive_nodes = []
+        sem = asyncio.Semaphore(CONFIG["PING_THREADS"])
         
-        # 2. Дата обновления
-        update_time = datetime.datetime.now().strftime("%d.%m %H:%M")
-        header_date = f"🔄 Updated: {update_time}"
-        final_lines.append(Utils.create_info_node(header_date))
+        async def pinger(n):
+            async with sem:
+                res = await self.ping_node(n)
+                if res and res.latency <= CONFIG["MAX_LATENCY"]:
+                    return res
+                return None
 
-        # === УЗЛЫ ===
-        for i, node in enumerate(valid_nodes, 1):
+        logger.info(f"⚡️ Пингуем {len(nodes)} узлов...")
+        results = await asyncio.gather(*[pinger(n) for n in nodes])
+        alive_nodes = [r for r in results if r]
+        
+        # Сортировка по пингу
+        alive_nodes.sort(key=lambda x: x.latency)
+        logger.info(f"✅ Живых: {len(alive_nodes)}. Запуск GeoIP...")
+
+        # --- ЭТАП 3: GEOIP (ПОСЛЕДОВАТЕЛЬНО) ---
+        # Мы проходим циклом for, а не gather. Это гарантирует отсутствие банов.
+        async with aiohttp.ClientSession() as session:
+            for i, node in enumerate(alive_nodes):
+                await self.resolve_geo_sequential(node, session)
+                # Логируем прогресс каждые 10 узлов
+                if i % 10 == 0: logger.info(f"🌍 Geo прогресс: {i}/{len(alive_nodes)}")
+
+        # --- ЭТАП 4: СБОРКА ФАЙЛА ---
+        final_lines = []
+        final_lines.append(Utils.create_header(f"ℹ️ {CONFIG['SUB_TITLE']}"))
+        final_lines.append(Utils.create_header(f"🔄 Updated: {datetime.datetime.now().strftime('%d.%m %H:%M')}"))
+
+        for i, node in enumerate(alive_nodes, 1):
             flag = Utils.get_flag(node.country_code)
             sni = Utils.clean_sni(node.sni, node.address)
             
-            # ФОРМАТ: 01 🇫🇮 FI | sni.com | VLESS
-            # (Пинг убрали, добавили Тип протокола)
+            # 01 🇩🇪 DE | google.com | VLESS
             new_name = f"{i:02d} {flag} {node.country_code} | {sni} | {node.protocol}"
             
             if node.protocol == "VLESS":
@@ -254,7 +261,7 @@ class Bot:
         with open(CONFIG["OUTPUT_FILE"], "w", encoding="utf-8") as f:
             f.write(Utils.encode_base64("\n".join(final_lines)))
         
-        logger.info("💾 Сохранено!")
+        logger.info("💾 ГОТОВО!")
 
 if __name__ == "__main__":
     if sys.platform == 'win32': asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
