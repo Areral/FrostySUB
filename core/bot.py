@@ -29,7 +29,7 @@ CONFIG = {
     "THREADS": 10,           # Количество одновременных проверок Sing-box
     "TCP_TIMEOUT": 3,        # Быстрый отсев мертвых портов (сек)
     "HTTP_TIMEOUT": 12,      # Таймаут для URL Ping + Geo (сек)
-    "MAX_LATENCY": 3500,     # Максимально допустимый URL Ping
+    "MAX_LATENCY": 5000,     # Максимально допустимый URL Ping
     "GEO_API": "https://ipwho.is/",
     "USER_AGENT": "v2rayNG/1.8.5"
 }
