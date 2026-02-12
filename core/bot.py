@@ -13,6 +13,7 @@ import os
 import random
 import datetime
 import subprocess
+import socket
 from aiohttp_socks import ProxyConnector
 from dataclasses import dataclass
 from typing import List, Optional
@@ -25,8 +26,10 @@ CONFIG = {
     "OUTPUT_FILE": "subscription.txt",
     "SUB_TITLE": "_ _ _By Frosty XC_ _ _",
     
-    "THREADS": 10,        # Количество одновременных проверок
-    "TIMEOUT": 20,        # Общий таймаут
+    "THREADS": 10,           # Количество одновременных проверок Sing-box
+    "TCP_TIMEOUT": 3,        # Быстрый отсев мертвых портов (сек)
+    "HTTP_TIMEOUT": 12,      # Таймаут для URL Ping + Geo (сек)
+    "MAX_LATENCY": 500,      # Максимально допустимый URL Ping
     "GEO_API": "https://ipwho.is/",
     "USER_AGENT": "v2rayNG/1.8.5"
 }
@@ -84,30 +87,18 @@ class SingBoxManager:
             "uuid": c['uuid'],
             "packet_encoding": "xudp"
         }
-        
         if c.get('security') == 'reality':
             outbound["tls"] = {
-                "enabled": True,
-                "server_name": c.get('sni'),
+                "enabled": True, "server_name": c.get('sni'),
                 "utls": {"enabled": True, "fingerprint": c.get('fp', 'chrome')},
                 "reality": {
-                    "enabled": True,
-                    "public_key": c.get('pbk'),
-                    "short_id": c.get('sid')
+                    "enabled": True, "public_key": c.get('pbk'), "short_id": c.get('sid')
                 }
             }
-        
-        if c.get('flow'): 
-            outbound["flow"] = c.get('flow')
-
+        if c.get('flow'): outbound["flow"] = c.get('flow')
         return {
             "log": {"level": "error"},
-            "inbounds": [{
-                "type": "socks",
-                "tag": "socks-in",
-                "listen": "127.0.0.1",
-                "listen_port": local_port
-            }],
+            "inbounds": [{"type": "socks", "tag": "socks-in", "listen": "127.0.0.1", "listen_port": local_port}],
             "outbounds": [outbound]
         }
 
@@ -118,107 +109,105 @@ class SingBoxManager:
 class CheckerBot:
     async def parse_links(self) -> List[ProxyNode]:
         nodes = []
-        seen_identifiers = set() # Для удаления дубликатов
-        
+        seen_identifiers = set()
         try:
             with open(CONFIG["SOURCES_FILE"], "r") as f:
                 urls = [l.strip() for l in f if l.strip() and not l.startswith("#")]
-        except: 
-            logger.error("Файл источников не найден!")
-            return []
+        except: return []
 
         async with aiohttp.ClientSession() as session:
             for url in urls:
                 try:
                     async with session.get(url, timeout=10) as resp:
                         content = await resp.text()
-                        if "://" not in content[:50]:
-                            content = Utils.decode_b64(content)
-                            
-                        count_before = len(nodes)
+                        if "://" not in content[:50]: content = Utils.decode_b64(content)
                         for line in content.splitlines():
                             line = line.strip()
                             if line.startswith("vless://"):
                                 p = urllib.parse.urlparse(line)
                                 q = urllib.parse.parse_qs(p.query)
-                                
-                                # Параметры для идентификации уникальности
-                                server = p.hostname
-                                port = p.port
-                                uuid = p.username
-                                
-                                # Создаем уникальный ключ (ID) прокси
-                                # Если сервер, порт и UUID совпадают — это один и тот же прокси
-                                node_id = f"{server}:{port}:{uuid}"
-                                
+                                node_id = f"{p.hostname}:{p.port}:{p.username}"
                                 if node_id not in seen_identifiers:
                                     nodes.append(ProxyNode(line, "VLESS", {
-                                        "server": server, "port": port, "uuid": uuid,
+                                        "server": p.hostname, "port": p.port, "uuid": p.username,
                                         "sni": q.get('sni',[''])[0], "pbk": q.get('pbk',[''])[0],
                                         "sid": q.get('sid',[''])[0], "fp": q.get('fp',['chrome'])[0],
                                         "security": q.get('security',[''])[0], "flow": q.get('flow',[''])[0]
                                     }))
                                     seen_identifiers.add(node_id)
-                        
-                        logger.info(f"📥 {url} -> Добавлено новых: {len(nodes) - count_before}")
-                except Exception as e:
-                    logger.warning(f"Ошибка источника {url}: {e}")
-        
+                except: pass
         return nodes
 
-    async def validate_via_proxy(self, node: ProxyNode, semaphore: asyncio.Semaphore) -> Optional[ProxyNode]:
+    async def tcp_ping(self, node: ProxyNode) -> bool:
+            #Быстрая проверка доступности порта (отсев совсем мертвых)
+        try:
+            # Превращаем домен в IP для корректности сокета
+            loop = asyncio.get_running_loop()
+            ip = await loop.run_in_executor(None, socket.gethostbyname, node.config['server'])
+            
+            t0 = time.perf_counter()
+            conn = asyncio.open_connection(ip, node.config['port'])
+            reader, writer = await asyncio.wait_for(conn, timeout=CONFIG["TCP_TIMEOUT"])
+            writer.close()
+            await writer.wait_closed()
+            return True
+        except:
+            return False
+
+    async def validate_via_singbox(self, node: ProxyNode, semaphore: asyncio.Semaphore) -> Optional[ProxyNode]:
+            #Полноценная проверка через URL Ping + Geo
         async with semaphore:
             port = random.randint(20000, 40000)
             config_path = f"config_{port}.json"
-            
-            with open(config_path, 'w') as f:
-                json.dump(SingBoxManager.generate_config(node, port), f)
+            with open(config_path, 'w') as f: json.dump(SingBoxManager.generate_config(node, port), f)
 
-            process = subprocess.Popen(
-                ["sing-box", "run", "-c", config_path],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-            )
-            
-            await asyncio.sleep(2.5)
+            process = subprocess.Popen(["sing-box", "run", "-c", config_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            await asyncio.sleep(2.5) # Время на старт Reality туннеля
 
             t0 = time.perf_counter()
             try:
                 connector = ProxyConnector.from_url(f'socks5://127.0.0.1:{port}')
                 async with aiohttp.ClientSession(connector=connector) as session:
-                    async with session.get(CONFIG["GEO_API"], timeout=10) as resp:
+                    # Здесь происходит URL Ping к GEO API через прокси
+                    async with session.get(CONFIG["GEO_API"], timeout=CONFIG["HTTP_TIMEOUT"]) as resp:
                         if resp.status == 200:
                             data = await resp.json()
                             if data.get('success'):
-                                node.country_code = data.get('country_code', 'UN')
-                                node.latency = (time.perf_counter() - t0) * 1000
-                                logger.info(f"✅ OK: {node.config['server']} -> {node.country_code} ({int(node.latency)}ms)")
-                                return node
-            except:
-                pass
+                                node.latency = (time.perf_counter() - t0) * 1000 # Это и есть URL Ping задержка
+                                if node.latency <= CONFIG["MAX_LATENCY"]:
+                                    node.country_code = data.get('country_code', 'UN')
+                                    logger.info(f"✅ REAL DELAY: {node.config['server']} -> {node.country_code} ({int(node.latency)}ms)")
+                                    return node
+            except: pass
             finally:
                 process.terminate()
                 try: process.wait(timeout=2)
                 except: process.kill()
                 if os.path.exists(config_path): os.remove(config_path)
-            
             return None
 
     async def run(self):
-        logger.info("🚀 ЗАПУСК ВАЛИДАЦИИ...")
-        
-        # 1. Загрузка и Дедупликация
+        logger.info("🚀 ЗАПУСК: Удаление дубликатов...")
         all_nodes = await self.parse_links()
-        logger.info(f"🔎 После удаления дубликатов осталось: {len(all_nodes)} узлов")
+        logger.info(f"🔎 Уникальных ссылок найдено: {len(all_nodes)}")
 
-        # 2. Проверка
+        # 1. ШАГ: Быстрый TCP Пинг (Отсев мертвых)
+        logger.info("📡 Этап 1: Быстрый TCP отсев...")
+        tcp_tasks = [self.tcp_ping(n) for n in all_nodes]
+        tcp_results = await asyncio.gather(*tcp_tasks)
+        
+        filtered_nodes = [node for node, is_alive in zip(all_nodes, tcp_results) if is_alive]
+        logger.info(f"📉 После TCP отсева осталось: {len(filtered_nodes)} (удалено {len(all_nodes)-len(filtered_nodes)})")
+
+        # 2. ШАГ: Полноценный URL Ping + Geo через Sing-box
+        logger.info(f"⚙️ Этап 2: Проверка URL Ping (Real Delay) через Sing-box...")
         sem = asyncio.Semaphore(CONFIG["THREADS"])
-        tasks = [self.validate_via_proxy(n, sem) for n in all_nodes]
-        results = await asyncio.gather(*tasks)
+        results = await asyncio.gather(*[self.validate_via_singbox(n, sem) for n in filtered_nodes])
         
         alive = [r for r in results if r]
         alive.sort(key=lambda x: x.latency)
 
-        # 3. Сборка подписки
+        # 3. ШАГ: Сборка файла
         final_list = [
             Utils.create_header(f"ℹ️ {CONFIG['SUB_TITLE']}"),
             Utils.create_header(f"🔄 Updated: {datetime.datetime.now().strftime('%d.%m %H:%M')}")
@@ -226,20 +215,18 @@ class CheckerBot:
 
         for i, n in enumerate(alive, 1):
             flag = chr(ord(n.country_code[0]) + 127397) + chr(ord(n.country_code[1]) + 127397)
-            # Отображаем SNI или сервер в названии
-            sni_display = n.config['sni'] if n.config['sni'] else n.config['server']
-            display_name = f"{i:02d} {flag} {n.country_code} | {sni_display} | {n.protocol}"
+            sni = n.config['sni'] or n.config['server']
+            # В названии теперь пишем реальный пинг, как в приложении
+            display_name = f"{i:02d} {flag} {n.country_code} | {sni} | {int(n.latency)}ms"
             
             parsed_uri = urllib.parse.urlparse(n.raw_uri)
-            new_uri = parsed_uri._replace(fragment=urllib.parse.quote(display_name)).geturl()
-            final_list.append(new_uri)
+            final_list.append(parsed_uri._replace(fragment=urllib.parse.quote(display_name)).geturl())
 
         with open(CONFIG["OUTPUT_FILE"], "w", encoding="utf-8") as f:
             f.write(Utils.encode_b64("\n".join(final_list)))
 
-        logger.info(f"💾 Готово! Сохранено живых: {len(alive)}")
+        logger.info(f"💾 ГОТОВО! Сохранено живых узлов: {len(alive)}")
 
 if __name__ == "__main__":
-    if sys.platform == 'win32':
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    if sys.platform == 'win32': asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     asyncio.run(CheckerBot().run())
