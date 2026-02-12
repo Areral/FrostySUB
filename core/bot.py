@@ -13,7 +13,7 @@ import datetime
 import random
 import socket
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 # ===========================
 # ⚙️ НАСТРОЙКИ
@@ -22,25 +22,27 @@ CONFIG = {
     "SOURCES_FILE": "config/sources.txt",
     "OUTPUT_FILE": "subscription.txt",
     
+    # Заголовок
     "SUB_TITLE": "_ _ _By Frosty XC_ _ _",
     
-    "TIMEOUT": 10,       # Таймаут на подключение
-    "MAX_LATENCY": 2000, # Максимальный пинг
-    "PING_THREADS": 40,  # Пинг делаем быстро и много
+    # Таймауты и потоки
+    "TIMEOUT": 10,       
+    "MAX_LATENCY": 2500, 
+    "THREADS": 15,       # Оптимально для ротации API
     
-    # 🌍 ВАЖНО: Список ручных исправлений
-    # Если бот все равно ошибается, впишите часть домена и нужный код сюда
-    "MANUAL_OVERRIDES": {
-        "ge.spectrum.vu": "DE",
-        "de.spectrum.vu": "DE",
-        ".ru": "RU",
-        ".de": "DE"
-    },
-    
-    # API используем по очереди
+    # 🌍 СПИСОК GEO-API (Ротация)
+    # Бот будет случайно выбирать один из них для каждого прокси
     "GEO_APIS": [
+        # API 1: Очень точный, лояльный лимит
         "https://ipwho.is/{ip}",
-        "http://ip-api.com/json/{ip}?fields=status,country,countryCode"
+        # API 2: Стандартный
+        "http://ip-api.com/json/{ip}?fields=status,country,countryCode",
+        # API 3: Альтернатива
+        "https://freeipapi.com/api/json/{ip}",
+        # API 4: Еще один источник
+        "https://api.iplocation.net/?ip={ip}",
+        # API 5: Резерв
+        "https://api.dtech.lol/ip/{ip}"
     ],
     
     "USER_AGENT": "v2rayNG/1.8.5 (Linux; Android 13; K)"
@@ -57,14 +59,13 @@ logger = logging.getLogger("Bot")
 class ProxyNode:
     raw_uri: str
     protocol: str
-    address: str
+    address: str      # Домен или IP из ссылки
+    resolved_ip: str  # Реальный IP после DNS запроса
     port: int
     sni: str = ""
     host: str = ""
     country_code: str = "UN"
-    country_name: str = "Unknown"
     latency: float = 9999.0
-    ip_resolved: str = "" # Сюда сохраним реальный IP
 
 class Utils:
     @staticmethod
@@ -133,110 +134,120 @@ class Bot:
                 except: pass
         return list(set(links))
 
-    # --- 1. ПИНГЕР (БЫСТРО, ПАРАЛЛЕЛЬНО) ---
-    async def ping_node(self, node: ProxyNode) -> Optional[ProxyNode]:
+    # --- DNS RESOLVER ---
+    # Это ключевой момент: мы превращаем домен в IP ПЕРЕД тем как спросить GeoAPI
+    async def resolve_dns(self, domain: str) -> str:
+        # Если это уже IP, возвращаем его
         try:
-            # Сначала пытаемся разрешить DNS, чтобы узнать реальный IP
-            # Это пригодится для GeoIP, чтобы не спрашивать у API домен
-            loop = asyncio.get_running_loop()
-            try:
-                # В Linux/Docker это работает быстро
-                ip = await loop.run_in_executor(None, socket.gethostbyname, node.address)
-                node.ip_resolved = ip
-            except:
-                node.ip_resolved = node.address # Если не вышло, оставляем как есть
+            socket.inet_aton(domain)
+            return domain
+        except: pass
+        
+        # Если домен, резолвим
+        loop = asyncio.get_running_loop()
+        try:
+            ip = await loop.run_in_executor(None, socket.gethostbyname, domain)
+            return ip
+        except:
+            return domain # Если не вышло, возвращаем домен (но это плохо для geo)
 
+    # --- GEO RESOLVER (ROTATION) ---
+    async def get_geo_info(self, ip: str, session: aiohttp.ClientSession) -> str:
+        if ip in self.geo_cache: return self.geo_cache[ip]
+
+        # Перемешиваем список API, чтобы каждый запрос шел к случайному сервису
+        apis = CONFIG["GEO_APIS"].copy()
+        random.shuffle(apis)
+
+        for api_tpl in apis:
+            try:
+                # Пауза перед запросом (Jitter)
+                await asyncio.sleep(random.uniform(0.1, 0.4))
+                
+                url = api_tpl.format(ip=ip)
+                async with session.get(url, timeout=4, ssl=False) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        
+                        # Парсинг разных форматов ответов
+                        cc = (
+                            data.get('countryCode') or 
+                            data.get('country_code') or 
+                            data.get('country_iso') or # iplocation.net
+                            'UN'
+                        )
+                        
+                        if cc and cc not in ['UN', 'XX']:
+                            self.geo_cache[ip] = cc
+                            return cc
+            except: continue
+        
+        return "UN"
+
+    # --- CHECKER ---
+    async def check_node(self, node: ProxyNode, session: aiohttp.ClientSession) -> Optional[ProxyNode]:
+        try:
+            # 1. DNS Resolve (Узнаем реальный IP сервера)
+            # Мы проверяем не конфиг целиком, а именно адрес, куда пойдет трафик
+            node.resolved_ip = await self.resolve_dns(node.address)
+
+            # 2. Ping (TCP Connect к IP)
             t0 = time.perf_counter()
-            fut = asyncio.open_connection(node.address, node.port)
+            fut = asyncio.open_connection(node.resolved_ip, node.port) # Коннектимся по IP!
             r, w = await asyncio.wait_for(fut, timeout=CONFIG["TIMEOUT"])
             w.close()
             await w.wait_closed()
             node.latency = (time.perf_counter() - t0) * 1000
             
+            if node.latency > CONFIG["MAX_LATENCY"]: return None
+
+            # 3. GeoIP (По IP адресу, а не домену)
+            node.country_code = await self.get_geo_info(node.resolved_ip, session)
             return node
-        except:
-            return None
 
-    # --- 2. ГЕОЛОКАТОР (МЕДЛЕННО, ПОСЛЕДОВАТЕЛЬНО) ---
-    async def resolve_geo_sequential(self, node: ProxyNode, session: aiohttp.ClientSession):
-        # 1. Проверка ручных правил (MANUAL_OVERRIDES)
-        for key, val in CONFIG["MANUAL_OVERRIDES"].items():
-            if key in node.address:
-                node.country_code = val
-                return
-
-        target = node.ip_resolved if node.ip_resolved else node.address
-        
-        if target in self.geo_cache:
-            node.country_code = self.geo_cache[target]
-            return
-
-        # 2. Запрос к API (строго по одному)
-        for api_tpl in CONFIG["GEO_APIS"]:
-            try:
-                # Небольшая пауза, чтобы API не забанил за спам
-                await asyncio.sleep(0.2) 
-                
-                url = api_tpl.format(ip=target)
-                async with session.get(url, timeout=5, ssl=False) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        cc = data.get('countryCode') or data.get('country_code')
-                        
-                        if cc and cc not in ['UN', 'XX']:
-                            self.geo_cache[target] = cc
-                            node.country_code = cc
-                            return # Успех
-            except: continue
-        
-        # Если ничего не помогло
-        node.country_code = "UN"
+        except: return None
 
     async def run(self):
         logger.info("🚀 START...")
         raw_links = await self.fetch_links()
         
-        # --- ЭТАП 1: ПАРСИНГ ---
         nodes = []
         for l in raw_links:
             try:
                 if l.startswith("vless://"):
                     p = urllib.parse.urlparse(l)
                     q = urllib.parse.parse_qs(p.query)
-                    nodes.append(ProxyNode(l, "VLESS", p.hostname, p.port, q.get('sni',[''])[0], q.get('host',[''])[0]))
+                    nodes.append(ProxyNode(
+                        raw_uri=l, protocol="VLESS", 
+                        address=p.hostname, resolved_ip="", 
+                        port=p.port, sni=q.get('sni',[''])[0], host=q.get('host',[''])[0]
+                    ))
                 elif l.startswith("vmess://"):
                     d = json.loads(Utils.decode_base64(l[8:]))
-                    nodes.append(ProxyNode(l, "VMESS", d['add'], int(d['port']), d.get('sni','') or d.get('host',''), d.get('host','')))
+                    nodes.append(ProxyNode(
+                        raw_uri=l, protocol="VMESS", 
+                        address=d['add'], resolved_ip="", 
+                        port=int(d['port']), sni=d.get('sni','') or d.get('host',''), host=d.get('host','')
+                    ))
             except: pass
 
-        # --- ЭТАП 2: МАССОВЫЙ ПИНГ ---
+        logger.info(f"⚡️ Проверка {len(nodes)} узлов...")
+        
         alive_nodes = []
-        sem = asyncio.Semaphore(CONFIG["PING_THREADS"])
+        sem = asyncio.Semaphore(CONFIG["THREADS"])
         
-        async def pinger(n):
-            async with sem:
-                res = await self.ping_node(n)
-                if res and res.latency <= CONFIG["MAX_LATENCY"]:
-                    return res
-                return None
-
-        logger.info(f"⚡️ Пингуем {len(nodes)} узлов...")
-        results = await asyncio.gather(*[pinger(n) for n in nodes])
-        alive_nodes = [r for r in results if r]
-        
-        # Сортировка по пингу
-        alive_nodes.sort(key=lambda x: x.latency)
-        logger.info(f"✅ Живых: {len(alive_nodes)}. Запуск GeoIP...")
-
-        # --- ЭТАП 3: GEOIP (ПОСЛЕДОВАТЕЛЬНО) ---
-        # Мы проходим циклом for, а не gather. Это гарантирует отсутствие банов.
         async with aiohttp.ClientSession() as session:
-            for i, node in enumerate(alive_nodes):
-                await self.resolve_geo_sequential(node, session)
-                # Логируем прогресс каждые 10 узлов
-                if i % 10 == 0: logger.info(f"🌍 Geo прогресс: {i}/{len(alive_nodes)}")
+            async def worker(n):
+                async with sem:
+                    return await self.check_node(n, session)
+            
+            results = await asyncio.gather(*[worker(n) for n in nodes])
+            alive_nodes = [r for r in results if r]
 
-        # --- ЭТАП 4: СБОРКА ФАЙЛА ---
+        alive_nodes.sort(key=lambda x: x.latency)
+        logger.info(f"✅ Живых: {len(alive_nodes)}")
+
+        # --- СОХРАНЕНИЕ ---
         final_lines = []
         final_lines.append(Utils.create_header(f"ℹ️ {CONFIG['SUB_TITLE']}"))
         final_lines.append(Utils.create_header(f"🔄 Updated: {datetime.datetime.now().strftime('%d.%m %H:%M')}"))
@@ -245,7 +256,7 @@ class Bot:
             flag = Utils.get_flag(node.country_code)
             sni = Utils.clean_sni(node.sni, node.address)
             
-            # 01 🇩🇪 DE | google.com | VLESS
+            # Формат вывода
             new_name = f"{i:02d} {flag} {node.country_code} | {sni} | {node.protocol}"
             
             if node.protocol == "VLESS":
