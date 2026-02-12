@@ -26,7 +26,7 @@ CONFIG = {
     "SUB_TITLE": "_ _ _By Frosty XC_ _ _",
     
     "THREADS": 10,        # Количество одновременных проверок
-    "TIMEOUT": 20,       # Общий таймаут
+    "TIMEOUT": 20,        # Общий таймаут
     "GEO_API": "https://ipwho.is/",
     "USER_AGENT": "v2rayNG/1.8.5"
 }
@@ -44,7 +44,6 @@ class Utils:
         s = s.strip()
         if not s: return ""
         try:
-            # Исправляем padding для base64
             return base64.b64decode(s + '=' * (-len(s) % 4)).decode('utf-8', 'ignore')
         except: return s
 
@@ -54,7 +53,6 @@ class Utils:
 
     @staticmethod
     def create_header(text: str) -> str:
-        """Создает карточку-заголовок (фейковый VMess)"""
         dummy = {
             "v": "2", "ps": text, "add": "127.0.0.1", "port": "1080",
             "id": "ffffffff-ffff-ffff-ffff-ffffffffffff",
@@ -78,8 +76,6 @@ class SingBoxManager:
     @staticmethod
     def generate_config(node: ProxyNode, local_port: int) -> dict:
         c = node.config
-        
-        # Конфигурация исходящего соединения
         outbound = {
             "type": "vless",
             "tag": "proxy",
@@ -89,7 +85,6 @@ class SingBoxManager:
             "packet_encoding": "xudp"
         }
         
-        # Reality / TLS настройки
         if c.get('security') == 'reality':
             outbound["tls"] = {
                 "enabled": True,
@@ -123,6 +118,8 @@ class SingBoxManager:
 class CheckerBot:
     async def parse_links(self) -> List[ProxyNode]:
         nodes = []
+        seen_identifiers = set() # Для удаления дубликатов
+        
         try:
             with open(CONFIG["SOURCES_FILE"], "r") as f:
                 urls = [l.strip() for l in f if l.strip() and not l.startswith("#")]
@@ -135,103 +132,112 @@ class CheckerBot:
                 try:
                     async with session.get(url, timeout=10) as resp:
                         content = await resp.text()
-                        # Проверка на base64 подписку
                         if "://" not in content[:50]:
                             content = Utils.decode_b64(content)
                             
+                        count_before = len(nodes)
                         for line in content.splitlines():
                             line = line.strip()
                             if line.startswith("vless://"):
                                 p = urllib.parse.urlparse(line)
                                 q = urllib.parse.parse_qs(p.query)
-                                nodes.append(ProxyNode(line, "VLESS", {
-                                    "server": p.hostname, "port": p.port, "uuid": p.username,
-                                    "sni": q.get('sni',[''])[0], "pbk": q.get('pbk',[''])[0],
-                                    "sid": q.get('sid',[''])[0], "fp": q.get('fp',['chrome'])[0],
-                                    "security": q.get('security',[''])[0], "flow": q.get('flow',[''])[0]
-                                }))
+                                
+                                # Параметры для идентификации уникальности
+                                server = p.hostname
+                                port = p.port
+                                uuid = p.username
+                                
+                                # Создаем уникальный ключ (ID) прокси
+                                # Если сервер, порт и UUID совпадают — это один и тот же прокси
+                                node_id = f"{server}:{port}:{uuid}"
+                                
+                                if node_id not in seen_identifiers:
+                                    nodes.append(ProxyNode(line, "VLESS", {
+                                        "server": server, "port": port, "uuid": uuid,
+                                        "sni": q.get('sni',[''])[0], "pbk": q.get('pbk',[''])[0],
+                                        "sid": q.get('sid',[''])[0], "fp": q.get('fp',['chrome'])[0],
+                                        "security": q.get('security',[''])[0], "flow": q.get('flow',[''])[0]
+                                    }))
+                                    seen_identifiers.add(node_id)
+                        
+                        logger.info(f"📥 {url} -> Добавлено новых: {len(nodes) - count_before}")
                 except Exception as e:
-                    logger.warning(f"Ошибка парсинга {url}: {e}")
+                    logger.warning(f"Ошибка источника {url}: {e}")
+        
         return nodes
 
     async def validate_via_proxy(self, node: ProxyNode, semaphore: asyncio.Semaphore) -> Optional[ProxyNode]:
         async with semaphore:
-            # Выбираем случайный порт для изоляции проверок
             port = random.randint(20000, 40000)
             config_path = f"config_{port}.json"
             
             with open(config_path, 'w') as f:
                 json.dump(SingBoxManager.generate_config(node, port), f)
 
-            # Запуск sing-box
             process = subprocess.Popen(
                 ["sing-box", "run", "-c", config_path],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
             )
             
-            await asyncio.sleep(2.5) # Ждем инициализации Reality
+            await asyncio.sleep(2.5)
 
             t0 = time.perf_counter()
             try:
-                # Настройка коннектора для работы через поднятый SOCKS5
                 connector = ProxyConnector.from_url(f'socks5://127.0.0.1:{port}')
                 async with aiohttp.ClientSession(connector=connector) as session:
-                    # Запрашиваем GeoIP через прокси
                     async with session.get(CONFIG["GEO_API"], timeout=10) as resp:
                         if resp.status == 200:
                             data = await resp.json()
                             if data.get('success'):
                                 node.country_code = data.get('country_code', 'UN')
                                 node.latency = (time.perf_counter() - t0) * 1000
-                                logger.info(f"✅ Успех: {node.config['server']} -> {node.country_code} ({int(node.latency)}ms)")
+                                logger.info(f"✅ OK: {node.config['server']} -> {node.country_code} ({int(node.latency)}ms)")
                                 return node
             except:
                 pass
             finally:
                 process.terminate()
-                try:
-                    process.wait(timeout=2)
-                except:
-                    process.kill()
-                if os.path.exists(config_path): 
-                    os.remove(config_path)
+                try: process.wait(timeout=2)
+                except: process.kill()
+                if os.path.exists(config_path): os.remove(config_path)
             
             return None
 
     async def run(self):
-        logger.info("🚀 ЗАПУСК ВАЛИДАЦИИ ЧЕРЕЗ SING-BOX...")
+        logger.info("🚀 ЗАПУСК ВАЛИДАЦИИ...")
+        
+        # 1. Загрузка и Дедупликация
         all_nodes = await self.parse_links()
-        logger.info(f"🔎 Найдено {len(all_nodes)} узлов. Начинаю проверку...")
+        logger.info(f"🔎 После удаления дубликатов осталось: {len(all_nodes)} узлов")
 
+        # 2. Проверка
         sem = asyncio.Semaphore(CONFIG["THREADS"])
         tasks = [self.validate_via_proxy(n, sem) for n in all_nodes]
         results = await asyncio.gather(*tasks)
         
         alive = [r for r in results if r]
-        # Сортировка по задержке
         alive.sort(key=lambda x: x.latency)
 
-        # Формирование итогового списка
+        # 3. Сборка подписки
         final_list = [
             Utils.create_header(f"ℹ️ {CONFIG['SUB_TITLE']}"),
             Utils.create_header(f"🔄 Updated: {datetime.datetime.now().strftime('%d.%m %H:%M')}")
         ]
 
         for i, n in enumerate(alive, 1):
-            # Создаем флаг из кода страны
             flag = chr(ord(n.country_code[0]) + 127397) + chr(ord(n.country_code[1]) + 127397)
-            # Формируем имя: 01 🇨🇦 CA | sni.com | VLESS
-            display_name = f"{i:02d} {flag} {n.country_code} | {n.config['sni'] or n.config['server']} | {n.protocol}"
+            # Отображаем SNI или сервер в названии
+            sni_display = n.config['sni'] if n.config['sni'] else n.config['server']
+            display_name = f"{i:02d} {flag} {n.country_code} | {sni_display} | {n.protocol}"
             
             parsed_uri = urllib.parse.urlparse(n.raw_uri)
             new_uri = parsed_uri._replace(fragment=urllib.parse.quote(display_name)).geturl()
             final_list.append(new_uri)
 
-        # Сохранение в файл подписки (Base64)
         with open(CONFIG["OUTPUT_FILE"], "w", encoding="utf-8") as f:
             f.write(Utils.encode_b64("\n".join(final_list)))
 
-        logger.info(f"💾 Готово! Живых узлов сохранено: {len(alive)}")
+        logger.info(f"💾 Готово! Сохранено живых: {len(alive)}")
 
 if __name__ == "__main__":
     if sys.platform == 'win32':
