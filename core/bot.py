@@ -19,19 +19,27 @@ from dataclasses import dataclass
 from typing import List, Optional
 
 # ===========================
-# ⚙️ КОНФИГУРАЦИЯ (v5.2 - Smart Speed)
+# 🕒 НАСТРОЙКА ВРЕМЕНИ (MSK UTC+3)
+# ===========================
+def msk_converter(*args):
+    return (datetime.datetime.utcnow() + datetime.timedelta(hours=3)).timetuple()
+
+logging.Formatter.converter = msk_converter
+logging.basicConfig(level=logging.INFO, format='%(asctime)s | %(message)s', datefmt='%H:%M:%S')
+logger = logging.getLogger("FrostyBot")
+
+# ===========================
+# ⚙️ КОНФИГУРАЦИЯ (v5.3)
 # ===========================
 CONFIG = {
     "SOURCES_FILE": "config/sources.txt",
     "OUTPUT_FILE": "subscription.txt",
     "SUB_TITLE": "_ _ _By Frosty XC_ _ _",
     
-    # Производительность
-    "THREADS": 8,            # 8 потоков - оптимально
-    "TCP_TIMEOUT": 2,        # Строгий отсев мертвых портов (2 сек)
-    "PIPELINE_TIMEOUT": 30,  # Таймаут на всю проверку одного узла
+    "THREADS": 8,            
+    "TCP_TIMEOUT": 3,        
+    "PIPELINE_TIMEOUT": 35,  
     
-    # Anti-Ban (Проверка доступа к "большому интернету")
     "CHECK_URLS": [
         "https://www.google.com/generate_204",
         "https://www.microsoft.com/",
@@ -39,22 +47,16 @@ CONFIG = {
         "https://www.cloudflare.com/"
     ],
     
-    # 🚀 SMART SPEED TEST
-    # Мы запрашиваем 15 МБ, чтобы увидеть реальную скорость 100+ Mbps.
-    # Но мы прервем тест раньше, если узел медленный.
-    "SPEED_TEST_URL": "http://speed.cloudflare.com/__down?bytes=15000000",
+    # 🚀 BALANCE SPEED TEST
+    # Качаем 8 МБ. Этого достаточно для замера 50-100 Mbps, но не тратит лишнего.
+    "SPEED_TEST_URL": "http://speed.cloudflare.com/__down?bytes=8000000",
     
-    # Порог "Элитности":
-    # Если первые 512 КБ скачались медленнее 2 Mbps, мы дропаем соединение,
-    # чтобы не тратить трафик на слабый прокси.
-    "MIN_SPEED_MBPS": 10.0,   # В итоговый файл попадут только мощные узлы (>= 10 Mbps в тесте)
+    # В итоговый файл попадают только те, кто быстрее 5 Mbps
+    "MIN_SPEED_MBPS": 5.0,   
     
     "GEO_API": "https://ipwho.is/",
     "USER_AGENT": "v2rayNG/1.8.5"
 }
-
-logging.basicConfig(level=logging.INFO, format='%(asctime)s | %(message)s', datefmt='%H:%M:%S')
-logger = logging.getLogger("SmartBot")
 
 # ===========================
 # 📦 УТИЛИТЫ
@@ -146,7 +148,6 @@ class SmartTesterBot:
                             if line.startswith("vless://"):
                                 p = urllib.parse.urlparse(line)
                                 q = urllib.parse.parse_qs(p.query)
-                                # Дедупликация: Сервер + Порт + UUID
                                 uid = f"{p.hostname}:{p.port}:{p.username}"
                                 if uid not in seen:
                                     nodes.append(ProxyNode(line, "VLESS", {
@@ -179,20 +180,20 @@ class SmartTesterBot:
                 json.dump(SingBoxManager.generate_config(node, port), f)
 
             proc = subprocess.Popen(["sing-box", "run", "-c", cfg_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            await asyncio.sleep(2.5)
+            await asyncio.sleep(2.5) # Ждем Handshake
 
             try:
                 connector = ProxyConnector.from_url(f'socks5://127.0.0.1:{port}')
                 async with aiohttp.ClientSession(connector=connector, timeout=aiohttp.ClientTimeout(total=CONFIG["PIPELINE_TIMEOUT"])) as session:
                     
-                    # 1. Anti-Ban (Быстрый чек)
+                    # 1. Anti-Ban
                     try:
-                        async with session.get(random.choice(CONFIG["CHECK_URLS"]), timeout=4) as resp:
+                        async with session.get(random.choice(CONFIG["CHECK_URLS"]), timeout=5) as resp:
                             if resp.status >= 400: raise Exception("Ban")
                     except: raise Exception("Dead")
 
                     # 2. GeoIP
-                    async with session.get(CONFIG["GEO_API"], timeout=4) as resp:
+                    async with session.get(CONFIG["GEO_API"], timeout=5) as resp:
                         if resp.status == 200:
                             data = await resp.json()
                             if data.get('success'):
@@ -200,43 +201,39 @@ class SmartTesterBot:
                             else: raise Exception("Geo Fail")
                         else: raise Exception("Geo Fail")
 
-                    # 3. SMART SPEED TEST (Экономия трафика)
+                    # 3. SOFT-START SPEED TEST
                     t_start = time.perf_counter()
                     async with session.get(CONFIG["SPEED_TEST_URL"]) as resp:
                         if resp.status == 200:
                             total_bytes = 0
-                            chunk_count = 0
                             
-                            # Читаем поток чанками (кусками)
-                            async for chunk in resp.content.iter_chunked(1024 * 64): # 64KB chunks
+                            # Качаем чанками
+                            async for chunk in resp.content.iter_chunked(1024 * 64):
                                 total_bytes += len(chunk)
-                                chunk_count += 1
                                 
-                                # ПРОВЕРКА ПОСЛЕ 1 МБ (16 чанков)
-                                if chunk_count == 16:
+                                # --- МЯГКАЯ ПРОВЕРКА (SOFT CHECK) ---
+                                # Проверяем скорость только когда скачали > 2.5 МБ
+                                # Это дает TCP время на разгон
+                                if total_bytes > 2_500_000:
                                     elapsed = time.perf_counter() - t_start
                                     current_speed = (total_bytes * 8 / elapsed) / 1_000_000
                                     
-                                    # Если на старте скорость меньше 3 Mbps — отрубаем!
-                                    # Это экономит ~14 МБ трафика на каждом слабом узле.
-                                    if current_speed < 3.0:
-                                        # logger.info(f"🐌 Slow: {node.config['server']} (~{int(current_speed)} Mbps) - Skipped")
-                                        raise Exception("Too slow")
+                                    # Если даже после 2.5 МБ скорость ниже 1 Мбит -> дропаем
+                                    if current_speed < 1.0:
+                                        raise Exception("Too slow start")
                             
-                            # Если дошли до конца (скачали 15 МБ), считаем итоговую скорость
+                            # Финальный подсчет (на 8 МБ)
                             duration = time.perf_counter() - t_start
                             if duration < 0.001: duration = 0.001
                             
                             speed_mbps = (total_bytes * 8 / duration) / 1_000_000
                             node.speed_mbps = round(speed_mbps, 1)
                             
-                            # Логируем только хорошие
                             if node.speed_mbps >= CONFIG["MIN_SPEED_MBPS"]:
                                 logger.info(f"🚀 {node.config['server']} | {node.country_code} | {node.speed_mbps} Mbps")
                                 return node
 
-            except Exception:
-                pass
+            except Exception: pass
             finally:
                 proc.terminate()
                 try: proc.wait(timeout=2)
@@ -246,34 +243,38 @@ class SmartTesterBot:
             return None
 
     async def run(self):
-        logger.info("🔰 ЗАПУСК SMART-BOT V5.2...")
+        # Получаем Московское время для логов
+        msk_now = datetime.datetime.utcnow() + datetime.timedelta(hours=3)
+        logger.info(f"🔰 STARTING BOT (MSK Time: {msk_now.strftime('%H:%M:%S')})...")
         
         all_nodes = await self.parse_links()
-        logger.info(f"🔎 Уникальных узлов: {len(all_nodes)}")
+        logger.info(f"🔎 Total unique nodes: {len(all_nodes)}")
 
-        logger.info("📡 TCP Check (Отсев мертвых)...")
+        logger.info("📡 TCP Check...")
         tcp_res = await asyncio.gather(*[self.tcp_check(n) for n in all_nodes])
         candidates = [n for n, ok in zip(all_nodes, tcp_res) if ok]
-        logger.info(f"📉 Кандидатов на SpeedTest: {len(candidates)}")
+        logger.info(f"📉 Alive ports: {len(candidates)}")
 
         if candidates:
-            logger.info("🏎️ Smart Speed Test (Target: 15MB)...")
+            logger.info("🏎️ Speed Test (8MB Load)...")
             sem = asyncio.Semaphore(CONFIG["THREADS"])
             results = await asyncio.gather(*[self.run_pipeline(n, sem) for n in candidates])
             
             alive = [r for r in results if r and r.speed_mbps >= CONFIG["MIN_SPEED_MBPS"]]
             alive.sort(key=lambda x: x.speed_mbps, reverse=True)
 
+            # --- ЗАГОЛОВОК С МОСКОВСКИМ ВРЕМЕНЕМ ---
+            update_time = (datetime.datetime.utcnow() + datetime.timedelta(hours=3)).strftime('%d.%m %H:%M')
+            
             final_list = [
                 Utils.create_header(f"ℹ️ {CONFIG['SUB_TITLE']}"),
-                Utils.create_header(f"⚡ High Speed Only (10+ Mbps)"),
-                Utils.create_header(f"🔄 Updated: {datetime.datetime.now().strftime('%d.%m %H:%M')}")
+                Utils.create_header(f"⚡ High Speed Only (>5 Mbps)"),
+                Utils.create_header(f"🔄 Updated: {update_time} (MSK)") # Подпись (MSK)
             ]
 
             for i, n in enumerate(alive, 1):
                 flag = chr(ord(n.country_code[0]) + 127397) + chr(ord(n.country_code[1]) + 127397)
                 sni = n.config['sni'] or n.config['server']
-                # Формат: 01 🇺🇸 US | google.com | 🚀 85.4 Mbps
                 display_name = f"{i:02d} {flag} {n.country_code} | {sni} | 🚀 {n.speed_mbps} Mbps"
                 
                 p = urllib.parse.urlparse(n.raw_uri)
@@ -282,9 +283,9 @@ class SmartTesterBot:
             with open(CONFIG["OUTPUT_FILE"], "w", encoding="utf-8") as f:
                 f.write(Utils.encode_b64("\n".join(final_list)))
 
-            logger.info(f"💾 Сохранено {len(alive)} элитных узлов.")
+            logger.info(f"💾 SAVED: {len(alive)} nodes.")
             if alive:
-                logger.info(f"🏆 MAX Скорость: {alive[0].speed_mbps} Mbps")
+                logger.info(f"🏆 MAX Speed: {alive[0].speed_mbps} Mbps")
 
 if __name__ == "__main__":
     if sys.platform == 'win32': asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
