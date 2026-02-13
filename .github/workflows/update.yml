@@ -6,7 +6,7 @@ name: 🚀 Proxy Sub Update
 on:
   schedule:
     # Запуск каждые 30 минут
-    - cron: '*/30 * * * *'
+    - cron: '0 */4 * * *'
   workflow_dispatch: # Позволяет запускать вручную кнопкой в интерфейсе GitHub
 
 jobs:
