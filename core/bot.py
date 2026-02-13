@@ -268,7 +268,7 @@ class SmartTesterBot:
             
             final_list = [
                 Utils.create_header(f"ℹ️ {CONFIG['SUB_TITLE']}"),
-                Utils.create_header(f"⚡ High Speed Only (>5 Mbps)"),
+                Utils.create_header(f"⚡ Speed Test: 8MB Load (>5 Mbps)"),
                 Utils.create_header(f"🔄 Updated: {update_time} (MSK)") # Подпись (MSK)
             ]
 
