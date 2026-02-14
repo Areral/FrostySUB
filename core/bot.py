@@ -35,7 +35,7 @@ CONFIG = {
     "OUTPUT_SUB": "subscription.txt",
     "TEMPLATE_FILE": "config/template.html",
     "OUTPUT_INDEX": "index.html",
-    "PUBLIC_URL": "https://sunny-areral.netlify.app/", 
+    "PUBLIC_URL": "https://sunny-areral.vercel.app/", 
     
     "THREADS": 10, 
     "TCP_TIMEOUT": 3, 
