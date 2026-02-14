@@ -26,31 +26,34 @@ def msk_converter(*args):
 
 logging.Formatter.converter = msk_converter
 logging.basicConfig(level=logging.INFO, format='%(asctime)s | %(message)s', datefmt='%H:%M:%S')
-logger = logging.getLogger("FrostyBot")
+logger = logging.getLogger("SunnyBot")
 
 # ===========================
-# ⚙️ КОНФИГУРАЦИЯ (v5.5 Full)
+# ⚙️ КОНФИГУРАЦИЯ (v6.0 Web Edition)
 # ===========================
 CONFIG = {
+    # Ссылки и файлы
     "SOURCES_FILE": "config/sources.txt",
-    "OUTPUT_FILE": "subscription.txt",
-    "SUB_TITLE": "_ _ _By Frosty XC_ _ _",
+    "OUTPUT_SUB": "subscription.txt",
+    "TEMPLATE_FILE": "config/template.html", # Наш HTML шаблон
+    "OUTPUT_INDEX": "index.html",            # Готовый сайт
     
-    # Ресурсы и лимиты
-    "THREADS": 10,            # Потоки для Sing-box
-    "TCP_THREADS": 50,        # Потоки для TCP отсева
-    "TCP_TIMEOUT": 2,         # Секунды на проверку порта
-    "PIPELINE_TIMEOUT": 30,   # Общий таймаут на 1 прокси
+    # Ссылка на подписку (для QR-кода и кнопки)
+    "PUBLIC_SUB_URL": "https://raw.githubusercontent.com/Areral/SunnyAreralSUB/refs/heads/main/subscription.txt",
     
-    # Тест скорости
+    # Заголовки подписки
+    "SUB_TITLE": "SunnyAreral Premium",
+    
+    # Настройки проверки
+    "THREADS": 10,
+    "TCP_TIMEOUT": 2,
+    "PIPELINE_TIMEOUT": 30,
+    
+    # Anti-Ban / Speed Test
+    "CHECK_URLS": ["https://www.google.com/generate_204", "https://www.cloudflare.com/cdn-cgi/trace"],
     "SPEED_TEST_URL": "http://speed.cloudflare.com/__down?bytes=8000000",
-    "MIN_SPEED_MBPS": 5.0,    # Порог входа в список
-    "EARLY_EXIT_SPEED": 8.0,  # Скорость для мгновенного одобрения (Early Exit)
-    
-    "CHECK_URLS": [
-        "https://www.google.com/generate_204",
-        "https://www.cloudflare.com/cdn-cgi/trace"
-    ],
+    "MIN_SPEED_MBPS": 5.0,
+    "EARLY_EXIT_SPEED": 8.0,
     
     "GEO_API": "https://ipwho.is/",
     "USER_AGENT": "v2rayNG/1.8.5"
@@ -91,16 +94,38 @@ class ProxyNode:
     speed_mbps: float = 0.0
 
 # ===========================
-# 🛠 МЕНЕДЖЕР SING-BOX
+# 🌐 ГЕНЕРАТОР САЙТА
 # ===========================
+class WebGenerator:
+    @staticmethod
+    def build_site(alive_count: int, max_speed: float, update_time: str):
+        """Создает красивый index.html из шаблона"""
+        try:
+            with open(CONFIG["TEMPLATE_FILE"], "r", encoding="utf-8") as f:
+                template = f.read()
+            
+            # Замена плейсхолдеров
+            html = template.replace("{{UPDATE_TIME}}", update_time)
+            html = html.replace("{{PROXY_COUNT}}", str(alive_count))
+            html = html.replace("{{MAX_SPEED}}", str(max_speed))
+            html = html.replace("{{SUB_LINK}}", CONFIG["PUBLIC_SUB_URL"])
+            
+            with open(CONFIG["OUTPUT_INDEX"], "w", encoding="utf-8") as f:
+                f.write(html)
+                
+            logger.info("🌐 ВЕБ-САЙТ ОБНОВЛЕН (index.html сгенерирован)")
+        except Exception as e:
+            logger.error(f"⚠️ Ошибка генерации сайта: {e}")
 
+# ===========================
+# 🛠 SING-BOX MANAGER
+# ===========================
 class SingBoxManager:
     @staticmethod
     def generate_config(node: ProxyNode, local_port: int) -> dict:
         c = node.config
         outbound = {
-            "type": "vless", "tag": "proxy",
-            "server": c['server'], "server_port": c['port'],
+            "type": "vless", "tag": "proxy", "server": c['server'], "server_port": c['port'],
             "uuid": c['uuid'], "packet_encoding": "xudp"
         }
         if c.get('security') == 'reality':
@@ -110,24 +135,17 @@ class SingBoxManager:
                 "reality": {"enabled": True, "public_key": c.get('pbk'), "short_id": c.get('sid')}
             }
         if c.get('flow'): outbound["flow"] = c.get('flow')
-
         return {
-            "log": {"level": "fatal"},
-            "dns": {"servers": [{"tag": "google", "address": "8.8.8.8"}]},
-            "inbounds": [{
-                "type": "socks", "tag": "socks-in", "listen": "127.0.0.1", "listen_port": local_port,
-                "sniff": True, "sniff_override_destination": True
-            }],
+            "log": {"level": "fatal"}, "dns": {"servers": [{"tag": "google", "address": "8.8.8.8"}]},
+            "inbounds": [{"type": "socks", "tag": "socks-in", "listen": "127.0.0.1", "listen_port": local_port, "sniff": True}],
             "outbounds": [outbound]
         }
 
 # ===========================
-# 🧠 КОР БОТА
+# 🧠 CORE LOGIC
 # ===========================
-
-class FullTesterBot:
+class SunnyBot:
     async def parse_links(self) -> List[ProxyNode]:
-        """Загрузка и УДАЛЕНИЕ ДУБЛИКАТОВ"""
         nodes = []
         seen = set()
         try:
@@ -141,14 +159,11 @@ class FullTesterBot:
                     async with session.get(url, timeout=10) as resp:
                         content = await resp.text()
                         if "://" not in content[:50]: content = Utils.decode_b64(content)
-                        
-                        count_before = len(nodes)
                         for line in content.splitlines():
                             line = line.strip()
                             if line.startswith("vless://"):
                                 p = urllib.parse.urlparse(line)
                                 q = urllib.parse.parse_qs(p.query)
-                                # Уникальный ID: хост + порт + uuid
                                 uid = f"{p.hostname}:{p.port}:{p.username}"
                                 if uid not in seen:
                                     nodes.append(ProxyNode(line, "VLESS", {
@@ -158,12 +173,10 @@ class FullTesterBot:
                                         "security": q.get('security',[''])[0], "flow": q.get('flow',[''])[0]
                                     }))
                                     seen.add(uid)
-                        logger.info(f"📥 {url} -> Уникальных: {len(nodes) - count_before}")
                 except: pass
         return nodes
 
     async def tcp_check(self, node: ProxyNode, sem: asyncio.Semaphore) -> bool:
-        """Быстрый TCP отсев"""
         async with sem:
             try:
                 loop = asyncio.get_running_loop()
@@ -176,54 +189,43 @@ class FullTesterBot:
             except: return False
 
     async def validate_node(self, node: ProxyNode, sem: asyncio.Semaphore) -> Optional[ProxyNode]:
-        """Глубокая проверка (Sing-box + Early Exit Speed)"""
         async with sem:
             port = random.randint(20000, 55000)
             cfg_path = f"t_{port}.json"
             with open(cfg_path, 'w') as f: json.dump(SingBoxManager.generate_config(node, port), f)
-
             proc = subprocess.Popen(["sing-box", "run", "-c", cfg_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            await asyncio.sleep(2.5) 
-
+            await asyncio.sleep(2.5)
             try:
                 connector = ProxyConnector.from_url(f'socks5://127.0.0.1:{port}')
                 async with aiohttp.ClientSession(connector=connector) as session:
-                    # 1. Anti-Ban
+                    # 1. AntiBan
                     async with session.get(random.choice(CONFIG["CHECK_URLS"]), timeout=5) as resp:
-                        if resp.status >= 400: raise Exception("Banned")
-
-                    # 2. GeoIP
+                        if resp.status >= 400: raise Exception("Ban")
+                    # 2. Geo
                     async with session.get(CONFIG["GEO_API"], timeout=5) as resp:
                         if resp.status == 200:
                             data = await resp.json()
                             if data.get('success'): node.country_code = data.get('country_code', 'UN')
-                            else: raise Exception("Geo Fail")
-
-                    # 3. EARLY EXIT SPEED TEST
+                            else: raise Exception("GeoFail")
+                    # 3. Speed
                     t_start = time.perf_counter()
                     async with session.get(CONFIG["SPEED_TEST_URL"]) as resp:
                         if resp.status == 200:
-                            total_bytes = 0
-                            async for chunk in resp.content.iter_chunked(1024 * 64):
-                                total_bytes += len(chunk)
-                                
-                                # Проверка после 1.5 МБ
-                                if total_bytes > 1_500_000:
-                                    elapsed = time.perf_counter() - t_start
-                                    current_speed = (total_bytes * 8 / elapsed) / 1_000_000
-                                    
-                                    if current_speed >= CONFIG["EARLY_EXIT_SPEED"]:
-                                        node.speed_mbps = round(current_speed, 1)
-                                        logger.info(f"✨ FAST: {node.config['server']} | {node.country_code} | {node.speed_mbps} Mbps")
+                            total = 0
+                            async for chunk in resp.content.iter_chunked(65536):
+                                total += len(chunk)
+                                if total > 1500000: # Early exit
+                                    cur = (total*8/(time.perf_counter()-t_start))/1000000
+                                    if cur >= CONFIG["EARLY_EXIT_SPEED"]:
+                                        node.speed_mbps = round(cur, 1)
+                                        logger.info(f"✨ FAST: {node.config['server']} | {node.speed_mbps} Mbps")
                                         return node
-                                    
-                                    if total_bytes > 3_000_000 and current_speed < 1.0:
-                                        raise Exception("Slow")
-
-                            duration = time.perf_counter() - t_start
-                            node.speed_mbps = round((total_bytes * 8 / (duration or 0.001)) / 1_000_000, 1)
+                                    if total > 3000000 and cur < 1.0: raise Exception("Slow")
+                            
+                            dur = time.perf_counter()-t_start
+                            node.speed_mbps = round((total*8/(dur or 0.001))/1000000, 1)
                             if node.speed_mbps >= CONFIG["MIN_SPEED_MBPS"]:
-                                logger.info(f"✅ OK: {node.config['server']} | {node.country_code} | {node.speed_mbps} Mbps")
+                                logger.info(f"✅ OK: {node.config['server']} | {node.speed_mbps} Mbps")
                                 return node
             except: pass
             finally:
@@ -235,51 +237,46 @@ class FullTesterBot:
 
     async def run(self):
         msk_now = datetime.datetime.utcnow() + datetime.timedelta(hours=3)
-        logger.info(f"🚀 FROSTY-BOT V5.5 (MSK: {msk_now.strftime('%H:%M:%S')})")
+        logger.info(f"🚀 SUNNY-BOT START (MSK: {msk_now.strftime('%H:%M:%S')})")
         
-        # 1. Загрузка и Дедупликация
-        all_nodes = await self.parse_links()
-        logger.info(f"🔎 Уникальных ссылок: {len(all_nodes)}")
+        nodes = await self.parse_links()
+        logger.info(f"🔎 Уникальных: {len(nodes)}")
 
-        # 2. Быстрый TCP отсев
-        logger.info(f"📡 TCP отсев ({CONFIG['TCP_THREADS']} потоков)...")
-        tcp_sem = asyncio.Semaphore(CONFIG["TCP_THREADS"])
-        tcp_results = await asyncio.gather(*[self.tcp_check(n, tcp_sem) for n in all_nodes])
-        candidates = [n for n, ok in zip(all_nodes, tcp_results) if ok]
-        logger.info(f"📉 Осталось живых портов: {len(candidates)}")
+        tcp_sem = asyncio.Semaphore(50)
+        tcp_res = await asyncio.gather(*[self.tcp_check(n, tcp_sem) for n in nodes])
+        candidates = [n for n, ok in zip(nodes, tcp_res) if ok]
+        logger.info(f"📉 Живых портов: {len(candidates)}")
 
-        # 3. Глубокая проверка
+        alive = []
         if candidates:
-            logger.info(f"🏎️ Запуск Sing-box + Early Exit Speed...")
             sem = asyncio.Semaphore(CONFIG["THREADS"])
-            results = await asyncio.gather(*[self.validate_node(n, sem) for n in candidates])
-            
-            alive = [r for r in results if r]
+            res = await asyncio.gather(*[self.validate_node(n, sem) for n in candidates])
+            alive = [r for r in res if r]
             alive.sort(key=lambda x: x.speed_mbps, reverse=True)
 
-            # ЗАГОЛОВКИ
-            update_time = (datetime.datetime.utcnow() + datetime.timedelta(hours=3)).strftime('%d.%m %H:%M')
-            final_list = [
+            update_time = msk_now.strftime('%d.%m %H:%M')
+            
+            # 1. СОХРАНЕНИЕ ПОДПИСКИ
+            final = [
                 Utils.create_header(f"ℹ️ {CONFIG['SUB_TITLE']}"),
-                Utils.create_header(f"⚡ High Speed (Invisible Mbps)"),
+                Utils.create_header(f"⚡ High Speed Validated"),
                 Utils.create_header(f"🔄 Updated: {update_time} (MSK)")
             ]
-
-            # СБОРКА ЧИСТОГО СПИСКА
             for i, n in enumerate(alive, 1):
-                flag = chr(ord(n.country_code[0]) + 127397) + chr(ord(n.country_code[1]) + 127397)
-                sni = n.config['sni'] or n.config['server']
-                # Название без цифр Mbps, но отсортировано!
-                display_name = f"{i:02d} {flag} {n.country_code} | {sni} | {n.protocol}"
-                
+                flag = chr(ord(n.country_code[0])+127397) + chr(ord(n.country_code[1])+127397)
+                nm = f"{i:02d} {flag} {n.country_code} | {n.config['sni'] or n.config['server']} | {n.protocol}"
                 p = urllib.parse.urlparse(n.raw_uri)
-                final_list.append(p._replace(fragment=urllib.parse.quote(display_name)).geturl())
+                final.append(p._replace(fragment=urllib.parse.quote(nm)).geturl())
+            
+            with open(CONFIG["OUTPUT_SUB"], "w", encoding="utf-8") as f:
+                f.write(Utils.encode_b64("\n".join(final)))
+            
+            logger.info(f"💾 Подписка сохранена: {len(alive)} узлов")
 
-            with open(CONFIG["OUTPUT_FILE"], "w", encoding="utf-8") as f:
-                f.write(Utils.encode_b64("\n".join(final_list)))
-
-            logger.info(f"💾 Готово! Сохранено: {len(alive)} узлов.")
+            # 2. ГЕНЕРАЦИЯ ВЕБ-САЙТА
+            max_spd = alive[0].speed_mbps if alive else 0
+            WebGenerator.build_site(len(alive), max_spd, update_time)
 
 if __name__ == "__main__":
     if sys.platform == 'win32': asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    asyncio.run(FullTesterBot().run())
+    asyncio.run(SunnyBot().run())
