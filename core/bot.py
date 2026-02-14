@@ -29,28 +29,27 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s | %(message)s', date
 logger = logging.getLogger("SunnyBot")
 
 # ===========================
-# ⚙️ КОНФИГУРАЦИЯ (v6.0 Web Edition)
+# ⚙️ КОНФИГУРАЦИЯ (v6.1 Clean & Fast)
 # ===========================
 CONFIG = {
-    # Ссылки и файлы
+    # Файлы
     "SOURCES_FILE": "config/sources.txt",
     "OUTPUT_SUB": "subscription.txt",
-    "TEMPLATE_FILE": "config/template.html", # Наш HTML шаблон
-    "OUTPUT_INDEX": "index.html",            # Готовый сайт
+    "TEMPLATE_FILE": "config/template.html",
+    "OUTPUT_INDEX": "index.html",
     
-    # Ссылка на подписку (для QR-кода и кнопки)
-    "PUBLIC_SUB_URL": "https://raw.githubusercontent.com/Areral/SunnyAreralSUB/refs/heads/main/subscription.txt",
+    # Ссылка для QR-кода на сайте (Здесь будет ваша Cloudflare ссылка)
+    "PUBLIC_SUB_URL": "https://sub.areral.workers.dev", 
     
-    # Заголовки подписки
-    "SUB_TITLE": "SunnyAreral Premium",
-    
-    # Настройки проверки
-    "THREADS": 10,
-    "TCP_TIMEOUT": 2,
-    "PIPELINE_TIMEOUT": 30,
+    # Настройки производительности (Ускорено!)
+    "THREADS": 15,            # Увеличили потоки для скорости
+    "TCP_TIMEOUT": 2,         # 2 секунды на пинг порта
+    "PIPELINE_TIMEOUT": 15,   # Уменьшили до 15 сек (было 30). Долго думать некогда.
     
     # Anti-Ban / Speed Test
     "CHECK_URLS": ["https://www.google.com/generate_204", "https://www.cloudflare.com/cdn-cgi/trace"],
+    
+    # 8MB Test / 5 Mbps Min / 8 Mbps Early Exit
     "SPEED_TEST_URL": "http://speed.cloudflare.com/__down?bytes=8000000",
     "MIN_SPEED_MBPS": 5.0,
     "EARLY_EXIT_SPEED": 8.0,
@@ -62,7 +61,6 @@ CONFIG = {
 # ===========================
 # 📦 УТИЛИТЫ
 # ===========================
-
 class Utils:
     @staticmethod
     def decode_b64(s: str) -> str:
@@ -75,15 +73,6 @@ class Utils:
     @staticmethod
     def encode_b64(s: str) -> str:
         return base64.b64encode(s.encode('utf-8')).decode('utf-8').replace('+', '-').replace('/', '_').replace('=', '')
-
-    @staticmethod
-    def create_header(text: str) -> str:
-        dummy = {
-            "v": "2", "ps": text, "add": "127.0.0.1", "port": "1080",
-            "id": "00000000-0000-0000-0000-000000000000",
-            "net": "tcp", "type": "none"
-        }
-        return "vmess://" + Utils.encode_b64(json.dumps(dummy))
 
 @dataclass
 class ProxyNode:
@@ -99,12 +88,10 @@ class ProxyNode:
 class WebGenerator:
     @staticmethod
     def build_site(alive_count: int, max_speed: float, update_time: str):
-        """Создает красивый index.html из шаблона"""
         try:
             with open(CONFIG["TEMPLATE_FILE"], "r", encoding="utf-8") as f:
                 template = f.read()
             
-            # Замена плейсхолдеров
             html = template.replace("{{UPDATE_TIME}}", update_time)
             html = html.replace("{{PROXY_COUNT}}", str(alive_count))
             html = html.replace("{{MAX_SPEED}}", str(max_speed))
@@ -112,8 +99,7 @@ class WebGenerator:
             
             with open(CONFIG["OUTPUT_INDEX"], "w", encoding="utf-8") as f:
                 f.write(html)
-                
-            logger.info("🌐 ВЕБ-САЙТ ОБНОВЛЕН (index.html сгенерирован)")
+            logger.info("🌐 Сайт index.html обновлен")
         except Exception as e:
             logger.error(f"⚠️ Ошибка генерации сайта: {e}")
 
@@ -194,15 +180,16 @@ class SunnyBot:
             cfg_path = f"t_{port}.json"
             with open(cfg_path, 'w') as f: json.dump(SingBoxManager.generate_config(node, port), f)
             proc = subprocess.Popen(["sing-box", "run", "-c", cfg_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            await asyncio.sleep(2.5)
+            await asyncio.sleep(2.5) # Ждем старта
             try:
                 connector = ProxyConnector.from_url(f'socks5://127.0.0.1:{port}')
-                async with aiohttp.ClientSession(connector=connector) as session:
+                # Строгий таймаут на всю операцию
+                async with aiohttp.ClientSession(connector=connector, timeout=aiohttp.ClientTimeout(total=CONFIG["PIPELINE_TIMEOUT"])) as session:
                     # 1. AntiBan
-                    async with session.get(random.choice(CONFIG["CHECK_URLS"]), timeout=5) as resp:
+                    async with session.get(random.choice(CONFIG["CHECK_URLS"]), timeout=4) as resp:
                         if resp.status >= 400: raise Exception("Ban")
                     # 2. Geo
-                    async with session.get(CONFIG["GEO_API"], timeout=5) as resp:
+                    async with session.get(CONFIG["GEO_API"], timeout=4) as resp:
                         if resp.status == 200:
                             data = await resp.json()
                             if data.get('success'): node.country_code = data.get('country_code', 'UN')
@@ -214,7 +201,7 @@ class SunnyBot:
                             total = 0
                             async for chunk in resp.content.iter_chunked(65536):
                                 total += len(chunk)
-                                if total > 1500000: # Early exit
+                                if total > 1500000: # Early exit > 1.5MB
                                     cur = (total*8/(time.perf_counter()-t_start))/1000000
                                     if cur >= CONFIG["EARLY_EXIT_SPEED"]:
                                         node.speed_mbps = round(cur, 1)
@@ -237,11 +224,12 @@ class SunnyBot:
 
     async def run(self):
         msk_now = datetime.datetime.utcnow() + datetime.timedelta(hours=3)
-        logger.info(f"🚀 SUNNY-BOT START (MSK: {msk_now.strftime('%H:%M:%S')})")
+        logger.info(f"🚀 SUNNY-BOT V6.1 START (MSK: {msk_now.strftime('%H:%M:%S')})")
         
         nodes = await self.parse_links()
         logger.info(f"🔎 Уникальных: {len(nodes)}")
 
+        # TCP Check (50 потоков для скорости)
         tcp_sem = asyncio.Semaphore(50)
         tcp_res = await asyncio.gather(*[self.tcp_check(n, tcp_sem) for n in nodes])
         candidates = [n for n, ok in zip(nodes, tcp_res) if ok]
@@ -249,6 +237,7 @@ class SunnyBot:
 
         alive = []
         if candidates:
+            # Singbox Check (15 потоков)
             sem = asyncio.Semaphore(CONFIG["THREADS"])
             res = await asyncio.gather(*[self.validate_node(n, sem) for n in candidates])
             alive = [r for r in res if r]
@@ -256,12 +245,8 @@ class SunnyBot:
 
             update_time = msk_now.strftime('%d.%m %H:%M')
             
-            # 1. СОХРАНЕНИЕ ПОДПИСКИ
-            final = [
-                Utils.create_header(f"ℹ️ {CONFIG['SUB_TITLE']}"),
-                Utils.create_header(f"⚡ High Speed Validated"),
-                Utils.create_header(f"🔄 Updated: {update_time} (MSK)")
-            ]
+            # 1. СОХРАНЕНИЕ ПОДПИСКИ (ЧИСТЫЙ СПИСОК)
+            final = [] # Убрали заголовки Utils.create_header
             for i, n in enumerate(alive, 1):
                 flag = chr(ord(n.country_code[0])+127397) + chr(ord(n.country_code[1])+127397)
                 nm = f"{i:02d} {flag} {n.country_code} | {n.config['sni'] or n.config['server']} | {n.protocol}"
@@ -273,7 +258,7 @@ class SunnyBot:
             
             logger.info(f"💾 Подписка сохранена: {len(alive)} узлов")
 
-            # 2. ГЕНЕРАЦИЯ ВЕБ-САЙТА
+            # 2. ГЕНЕРАЦИЯ САЙТА
             max_spd = alive[0].speed_mbps if alive else 0
             WebGenerator.build_site(len(alive), max_spd, update_time)
 
