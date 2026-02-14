@@ -32,27 +32,34 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s | %(message)s', date
 logger = logging.getLogger("SunnyBot")
 
 # ===========================
-# ⚙️ КОНФИГУРАЦИЯ
+# ⚙️ КОНФИГУРАЦИЯ (v6.4 Champion)
 # ===========================
 CONFIG = {
+    # Файлы
     "SOURCES_FILE": "config/sources.txt",
     "OUTPUT_SUB": "subscription.txt",
     "TEMPLATE_FILE": "config/template.html",
     "OUTPUT_INDEX": "index.html",
     
-    # Ссылка на корень вашего домена Netlify
+    # Новая ссылка Netlify
     "PUBLIC_URL": "https://sunny-areral.netlify.app/", 
     
-    "THREADS": 10,            
-    "TCP_TIMEOUT": 3,         
-    "PIPELINE_TIMEOUT": 30,   
+    # Ресурсы
+    "THREADS": 10,            # Потоки Sing-box
+    "TCP_TIMEOUT": 2,         # Отсев портов
+    "PIPELINE_TIMEOUT": 20,   # Таймаут обычной проверки
+    
+    # Массовая проверка (Экономим трафик)
+    # Если прокси выдал >8 Mbps, мы его берем и останавливаем тест.
+    "SPEED_TEST_URL": "http://speed.cloudflare.com/__down?bytes=8000000",
+    "MIN_SPEED_MBPS": 5.0,
+    "EARLY_EXIT_SPEED": 8.0,
+    
+    # Чемпионский тест (Только для ТОП-1)
+    # Качаем 50 МБ, чтобы разогнать канал до предела
+    "CHAMPION_TEST_URL": "http://speed.cloudflare.com/__down?bytes=50000000",
     
     "CHECK_URLS": ["https://www.google.com/generate_204", "https://www.cloudflare.com/cdn-cgi/trace"],
-    "SPEED_TEST_URL": "http://speed.cloudflare.com/__down?bytes=8000000",
-    
-    "MIN_SPEED_MBPS": 5.0,    
-    "EARLY_EXIT_SPEED": 8.0,  
-    
     "GEO_API": "https://ipwho.is/",
     "USER_AGENT": "v2rayNG/1.8.5"
 }
@@ -95,17 +102,43 @@ class WebGenerator:
             
             html = template.replace("{{UPDATE_TIME}}", update_str)
             html = html.replace("{{PROXY_COUNT}}", str(count))
-            html = html.replace("{{MAX_SPEED}}", str(top_speed))
+            # Округляем до целого для красоты (например, 350 вместо 350.2)
+            html = html.replace("{{MAX_SPEED}}", str(int(top_speed)))
             html = html.replace("{{SUB_LINK}}", CONFIG["PUBLIC_URL"])
             
             with open(CONFIG["OUTPUT_INDEX"], "w", encoding="utf-8") as f:
                 f.write(html)
-            logger.info(f"🌐 Сайт index.html сгенерирован")
+            logger.info(f"🌐 Сайт обновлен. Топ скорость: {int(top_speed)} Mbps")
         except Exception as e:
-            logger.error(f"⚠️ Ошибка веб-генератора: {e}")
+            logger.error(f"⚠️ Ошибка генерации сайта: {e}")
 
 # ===========================
-# 🧠 ВАЛИДАТОР
+# 🛠 SING-BOX MANAGER
+# ===========================
+class SingBoxManager:
+    @staticmethod
+    def generate_config(node: ProxyNode, local_port: int) -> dict:
+        c = node.config
+        outbound = {
+            "type": "vless", "tag": "proxy", "server": c['server'], "server_port": c['port'],
+            "uuid": c['uuid'], "packet_encoding": "xudp"
+        }
+        if c.get('security') == 'reality':
+            outbound["tls"] = {
+                "enabled": True, "server_name": c.get('sni'),
+                "utls": {"enabled": True, "fingerprint": c.get('fp', 'chrome')},
+                "reality": {"enabled": True, "public_key": c.get('pbk'), "short_id": c.get('sid')}
+            }
+        if c.get('flow'): outbound["flow"] = c.get('flow')
+        return {
+            "log": {"level": "fatal"}, 
+            "dns": {"servers": [{"tag": "google", "address": "8.8.8.8"}]},
+            "inbounds": [{"type": "socks", "tag": "socks-in", "listen": "127.0.0.1", "listen_port": local_port, "sniff": True}],
+            "outbounds": [outbound]
+        }
+
+# ===========================
+# 🧠 CORE LOGIC
 # ===========================
 class SunnyBot:
     async def get_nodes(self) -> List[ProxyNode]:
@@ -149,49 +182,42 @@ class SunnyBot:
                 return True
             except: return False
 
-    async def speed_test(self, node: ProxyNode, sem: asyncio.Semaphore) -> Optional[ProxyNode]:
+    async def standard_check(self, node: ProxyNode, sem: asyncio.Semaphore) -> Optional[ProxyNode]:
+        """Обычная проверка (с ранним выходом)"""
         async with sem:
-            port = random.randint(20000, 60000)
+            port = random.randint(20000, 55000)
             cfg = f"t_{port}.json"
             
-            sb_cfg = {
-                "log": {"level": "fatal"},
-                "inbounds": [{"type": "socks", "listen": "127.0.0.1", "listen_port": port, "sniff": True}],
-                "outbounds": [{
-                    "type": "vless", "server": node.config['server'], "server_port": node.config['port'],
-                    "uuid": node.config['uuid'], "packet_encoding": "xudp",
-                    "tls": {"enabled": True, "server_name": node.config['sni'], "utls": {"enabled": True},
-                            "reality": {"enabled": True, "public_key": node.config['pbk'], "short_id": node.config['sid']}} if node.config['security'] == 'reality' else {}
-                }]
-            }
-            with open(cfg, 'w') as f: json.dump(sb_cfg, f)
+            with open(cfg, 'w') as f: json.dump(SingBoxManager.generate_config(node, port), f)
             proc = subprocess.Popen(["sing-box", "run", "-c", cfg], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            await asyncio.sleep(2.5)
+            await asyncio.sleep(2.0)
 
             try:
                 connector = ProxyConnector.from_url(f'socks5://127.0.0.1:{port}')
                 async with aiohttp.ClientSession(connector=connector, timeout=aiohttp.ClientTimeout(total=CONFIG["PIPELINE_TIMEOUT"])) as session:
-                    async with session.get(CONFIG["GEO_API"], timeout=5) as resp:
+                    # 1. AntiBan
+                    async with session.get(random.choice(CONFIG["CHECK_URLS"]), timeout=4) as resp:
+                        if resp.status >= 400: raise Exception("Ban")
+                    # 2. Geo
+                    async with session.get(CONFIG["GEO_API"], timeout=4) as resp:
                         data = await resp.json()
                         if data.get('success'): node.country_code = data.get('country_code', 'UN')
-                        else: raise Exception()
-
+                        else: raise Exception("GeoFail")
+                    # 3. Efficiency Speed Test
                     t_start = time.perf_counter()
                     async with session.get(CONFIG["SPEED_TEST_URL"]) as resp:
                         total = 0
                         async for chunk in resp.content.iter_chunked(65536):
                             total += len(chunk)
-                            if total > 2000000: # Отсечка после 2МБ
-                                speed = (total*8/(time.perf_counter()-t_start))/1000000
-                                if speed >= CONFIG["EARLY_EXIT_SPEED"]:
-                                    node.speed_mbps = round(speed, 1)
-                                    logger.info(f"✨ FAST: {node.config['server']} | {node.speed_mbps} Mbps")
+                            if total > 1500000: # Early exit
+                                cur = (total*8/(time.perf_counter()-t_start))/1000000
+                                if cur >= CONFIG["EARLY_EXIT_SPEED"]:
+                                    node.speed_mbps = round(cur, 1)
                                     return node
                         
-                        dur = time.perf_counter() - t_start
+                        dur = time.perf_counter()-t_start
                         node.speed_mbps = round((total*8/(dur or 0.1))/1000000, 1)
                         if node.speed_mbps >= CONFIG["MIN_SPEED_MBPS"]:
-                            logger.info(f"✅ OK: {node.config['server']} | {node.speed_mbps} Mbps")
                             return node
             except: pass
             finally:
@@ -199,8 +225,42 @@ class SunnyBot:
                 if os.path.exists(cfg): os.remove(cfg)
             return None
 
+    async def champion_test(self, node: ProxyNode) -> float:
+        """ЭКСТРЕМАЛЬНЫЙ ТЕСТ ТОЛЬКО ДЛЯ ТОП-1"""
+        logger.info(f"🏆 Запуск Чемпионского теста для {node.config['server']}...")
+        port = random.randint(55001, 60000)
+        cfg = f"champ_{port}.json"
+        
+        with open(cfg, 'w') as f: json.dump(SingBoxManager.generate_config(node, port), f)
+        proc = subprocess.Popen(["sing-box", "run", "-c", cfg], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        await asyncio.sleep(2.5) # Даем чуть больше времени на разгон
+
+        max_speed = node.speed_mbps # Берем старую как минимум
+
+        try:
+            connector = ProxyConnector.from_url(f'socks5://127.0.0.1:{port}')
+            # Таймаут побольше для скачивания 50МБ
+            async with aiohttp.ClientSession(connector=connector, timeout=aiohttp.ClientTimeout(total=60)) as session:
+                t_start = time.perf_counter()
+                async with session.get(CONFIG["CHAMPION_TEST_URL"]) as resp:
+                    if resp.status == 200:
+                        content = await resp.read() # Качаем ВСЁ до конца
+                        duration = time.perf_counter() - t_start
+                        
+                        size_bits = len(content) * 8
+                        real_speed = (size_bits / duration) / 1_000_000
+                        max_speed = round(real_speed, 1)
+                        logger.info(f"🚀 ИСТИННАЯ СКОРОСТЬ: {max_speed} Mbps")
+        except Exception as e:
+            logger.warning(f"Сбой чемпионского теста: {e}")
+        finally:
+            proc.terminate()
+            if os.path.exists(cfg): os.remove(cfg)
+        
+        return max_speed
+
     async def run(self):
-        logger.info(f"🚀 SUNNY-BOT V6.3 (MSK: {msk_now().strftime('%H:%M:%S')})")
+        logger.info(f"🚀 SUNNY-BOT V6.4 CHAMPION (MSK: {msk_now().strftime('%H:%M:%S')})")
         nodes = await self.get_nodes()
         logger.info(f"🔎 Уникальных ссылок: {len(nodes)}")
 
@@ -208,13 +268,23 @@ class SunnyBot:
         tcp_res = await asyncio.gather(*[self.tcp_test(n, tcp_sem) for n in nodes])
         candidates = [n for n, ok in zip(nodes, tcp_res) if ok]
 
+        alive = []
         if candidates:
+            # 1. МАССОВАЯ ПРОВЕРКА (БЫСТРАЯ)
             sem = asyncio.Semaphore(CONFIG["THREADS"])
-            results = await asyncio.gather(*[self.speed_test(n, sem) for n in candidates])
+            results = await asyncio.gather(*[self.standard_check(n, sem) for n in candidates])
             alive = [r for r in results if r]
             alive.sort(key=lambda x: x.speed_mbps, reverse=True)
 
-            # 1. ПОДПИСКА (ЧИСТАЯ)
+            # 2. ЧЕМПИОНСКИЙ ТЕСТ (ТОЛЬКО ТОП-1)
+            top_speed = 0.0
+            if alive:
+                top_node = alive[0]
+                # Обновляем скорость чемпиона в списке
+                top_speed = await self.champion_test(top_node)
+                top_node.speed_mbps = top_speed
+
+            # 3. ПОДПИСКА (ЧИСТАЯ)
             final_sub = []
             for i, n in enumerate(alive, 1):
                 flag = chr(ord(n.country_code[0])+127397) + chr(ord(n.country_code[1])+127397)
@@ -225,9 +295,9 @@ class SunnyBot:
             with open(CONFIG["OUTPUT_SUB"], "w", encoding="utf-8") as f:
                 f.write(Utils.encode_b64("\n".join(final_sub)))
 
-            # 2. САЙТ
-            WebGenerator.build(len(alive), alive[0].speed_mbps if alive else 0)
-            logger.info("💾 Обновление завершено")
+            # 4. ГЕНЕРАЦИЯ САЙТА (С РЕАЛЬНОЙ МАКС СКОРОСТЬЮ)
+            WebGenerator.build(len(alive), top_speed)
+            logger.info("💾 Цикл завершен успешно")
 
 if __name__ == "__main__":
     asyncio.run(SunnyBot().run())
