@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SunnyAreral Config</title>
+    <!-- Fonts & Icons -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- QR Code Lib -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+    <style>
+        :root {
+            --bg-deep: #0f0f10;
+            --bg-surface: #18181b;
+            --color-blue: #3b82f6; --bg-blue: rgba(59, 130, 246, 0.1);
+            --color-green: #10b981; --bg-green: rgba(16, 185, 129, 0.1);
+            --color-red: #f43f5e; --bg-red: rgba(244, 63, 94, 0.1);
+            --color-yellow: #f59e0b; --bg-yellow: rgba(245, 158, 11, 0.1);
+            --text-main: #f4f4f5;
+            --text-muted: #a1a1aa;
+            --radius: 16px;
+            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg-deep);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            background-image: 
+                radial-gradient(circle at 10% 20%, rgba(245, 158, 11, 0.05) 0%, transparent 40%),
+                radial-gradient(circle at 90% 80%, rgba(59, 130, 246, 0.05) 0%, transparent 40%);
+        }
+        .dashboard { width: 100%; max-width: 480px; animation: fadeIn 0.8s ease-out; margin-top: 40px;}
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+        .logo { font-size: 1.8rem; font-weight: 800; background: linear-gradient(90deg, #fff, #888); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 30px; }
+        .card { background: var(--bg-surface); border-radius: var(--radius); padding: 18px; height: 130px; display: flex; flex-direction: column; justify-content: space-between; border: 1px solid rgba(255,255,255,0.05); position: relative; overflow: hidden; }
+        .card:hover { transform: translateY(-3px); border-color: rgba(255,255,255,0.15); box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+        .card.blue { border-top: 3px solid var(--color-blue); }
+        .card.green { border-top: 3px solid var(--color-green); }
+        .card.red { border-top: 3px solid var(--color-red); }
+        .card.yellow { border-top: 3px solid var(--color-yellow); }
+        
+        .card-label { font-size: 0.8rem; color: var(--text-muted); display: flex; align-items: center; gap: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+        .card-value { font-size: 1.6rem; font-weight: 800; color: #fff; }
+        .card-sub { font-size: 0.8rem; color: var(--text-muted); margin-top: 4px; }
+        
+        .icon-box { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1rem; }
+        .blue .icon-box { background: var(--bg-blue); color: var(--color-blue); }
+        .green .icon-box { background: var(--bg-green); color: var(--color-green); }
+        .red .icon-box { background: var(--bg-red); color: var(--color-red); }
+        .yellow .icon-box { background: var(--bg-yellow); color: var(--color-yellow); }
+
+        .actions-container { background: var(--bg-surface); border-radius: var(--radius); padding: 20px; border: 1px solid rgba(255,255,255,0.05); }
+        .sub-link-wrap { background: #000; padding: 14px; border-radius: 12px; margin-bottom: 20px; display: flex; align-items: center; border: 1px solid #222; }
+        .sub-link-text { flex: 1; background: transparent; border: none; color: #888; font-family: 'Courier New', monospace; font-size: 0.9rem; outline: none; }
+        
+        .btn-primary { width: 100%; background: #fff; color: #000; border: none; padding: 16px; border-radius: 12px; font-weight: 700; font-size: 1rem; cursor: pointer; transition: var(--transition); display: flex; align-items: center; justify-content: center; gap: 10px;}
+        .btn-primary:hover { transform: scale(1.02); box-shadow: 0 0 20px rgba(255,255,255,0.3); }
+        
+        .qr-area { text-align: center; margin-top: 20px; padding: 20px; background: #fff; border-radius: 12px; display: none; }
+        .qr-area.open { display: block; animation: fadeIn 0.5s; }
+
+        .footer { margin-top: 40px; text-align: center; font-size: 0.9rem; color: #555; }
+        .footer a { color: var(--color-blue); text-decoration: none; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+
+    <div class="dashboard">
+        <div class="header">
+            <div class="logo">SunnyAreral</div>
+        </div>
+
+        <div class="info-grid">
+            <!-- Profile -->
+            <div class="card blue">
+                <div class="card-label"><div class="icon-box"><i class="fa-regular fa-user"></i></div> PROFILE</div>
+                <div class="card-value">VIP</div>
+                <div class="card-sub">Free Tier</div>
+            </div>
+            <!-- Status -->
+            <div class="card green">
+                <div class="card-label"><div class="icon-box"><i class="fa-solid fa-check"></i></div> STATUS</div>
+                <div class="card-value">ACTIVE</div>
+                <div class="card-sub">Updated just now</div>
+            </div>
+            <!-- Update Time -->
+            <div class="card red">
+                <div class="card-label"><div class="icon-box"><i class="fa-regular fa-clock"></i></div> UPDATED</div>
+                <div class="card-value" style="font-size: 1.3rem">14.02 17:42</div>
+                <div class="card-sub">Moscow Time</div>
+            </div>
+            <!-- Stats -->
+            <div class="card yellow">
+                <div class="card-label"><div class="icon-box"><i class="fa-solid fa-server"></i></div> SERVERS</div>
+                <div class="card-value">0</div>
+                <div class="card-sub">Max: 0 Mbps</div>
+            </div>
+        </div>
+
+        <div class="actions-container">
+            <div class="sub-link-wrap">
+                <i class="fa-solid fa-link" style="color: #444; margin-right: 12px;"></i>
+                <input type="text" id="sub-link" class="sub-link-text" readonly value="https://raw.githubusercontent.com/Areral/SunnyAreralSUB/refs/heads/main/subscription.txt">
+            </div>
+            
+            <button class="btn-primary" onclick="copyLink()">
+                <i class="fa-regular fa-copy"></i> <span id="btn-text">COPY SUBSCRIPTION</span>
+            </button>
+            
+            <button class="btn-primary" style="margin-top: 10px; background: #222; color: #fff;" onclick="toggleQR()">
+                <i class="fa-solid fa-qrcode"></i> SHOW QR CODE
+            </button>
+
+            <div id="qr-area" class="qr-area">
+                <div id="qrcode"></div>
+            </div>
+        </div>
+
+        <div class="footer">
+            Powered by <a href="https://github.com/Areral" target="_blank">Areral</a> &bull; <a href="https://t.me/Areral" target="_blank">Telegram</a>
+        </div>
+    </div>
+
+    <script>
+        const SUB_URL = "https://raw.githubusercontent.com/Areral/SunnyAreralSUB/refs/heads/main/subscription.txt";
+        
+        function copyLink() {
+            const el = document.getElementById("sub-link");
+            el.select();
+            navigator.clipboard.writeText(el.value);
+            const btn = document.getElementById('btn-text');
+            btn.innerText = "COPIED!";
+            setTimeout(() => btn.innerText = "COPY SUBSCRIPTION", 2000);
+        }
+
+        function toggleQR() {
+            const area = document.getElementById('qr-area');
+            area.classList.toggle('open');
+            if (area.innerHTML.trim() === '<div id="qrcode"></div>') {
+                new QRCode(document.getElementById("qrcode"), {
+                    text: SUB_URL,
+                    width: 180,
+                    height: 180,
+                    colorDark : "#000000",
+                    colorLight : "#ffffff",
+                    correctLevel : QRCode.CorrectLevel.H
+                });
+            }
+        }
+    </script>
+</body>
+</html>
