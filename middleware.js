@@ -1,29 +1,30 @@
-import { next } from '@vercel/edge';
-
+// Мы не используем импорт { next }, чтобы избежать ошибок компиляции в статику
 export default function middleware(req) {
   const url = new URL(req.url);
   const userAgent = req.headers.get('user-agent') || '';
   const accept = req.headers.get('accept') || '';
 
-  // Ваша логика определения
-  // Если в Accept есть html и это Mozilla (браузер), и НЕ VPN клиент
+  // Твоя проверенная логика определения браузера
   const isBrowser = accept.includes('text/html') && 
                     userAgent.includes('Mozilla') && 
                     !userAgent.includes('v2rayNG') && 
                     !userAgent.includes('NekoBox') &&
                     !userAgent.includes('Hiddify');
 
-  // Если зашел человек через браузер -> разрешаем просмотр index.html
   if (isBrowser) {
-    return next();
+    // Если это браузер — ничего не делаем, Vercel просто покажет index.html
+    return;
   }
 
-  // Если это приложение или прямой запрос -> делаем внутренний редирект на файл
-  // rewrite не меняет URL в строке браузера/клиента, но отдает контент другого файла
-  return new URL('/subscription.txt', req.url);
+  // Если это приложение (или прямой запрос не из браузера)
+  // Мы делаем "rewrite" — подменяем контент главной страницы контентом файла подписки
+  url.pathname = '/subscription.txt';
+  
+  // Статичный метод rewrite доступен в Edge Runtime Vercel автоматически
+  return Response.rewrite(url);
 }
 
-// Настраиваем срабатывание только на главную страницу
+// Настройка: обрабатывать только запросы к главной странице
 export const config = {
   matcher: '/',
 };
