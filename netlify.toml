@@ -1,13 +1,3 @@
-# Правило для VPN-клиентов (если в User-Agent есть эти слова, отдаем файл)
-[[redirects]]
-  from = "/"
-  to = "/subscription.txt"
-  status = 200
-  force = true
-  conditions = {User-Agent = ["v2rayNG", "NekoBox", "Hiddify", "Sing-box", "Shadowrocket"]}
-
-# Правило для всех остальных (браузеров) — показываем index.html
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
+[[edge_functions]]
+  function = "sub-handler"
+  path = "/"
