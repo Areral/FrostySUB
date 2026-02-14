@@ -1,11 +1,11 @@
 name: 🚀 Proxy Sub Update
 
-# Описание: Автоматическое обновление подписки Frosty XC.
+# Описание: Автоматическое обновление подписки
 # Запускается по расписанию и проверяет работоспособность каждого узла через Sing-box.
 
 on:
   schedule:
-    # Запуск каждые 30 минут
+    # Запуск каждые 6 часов
     - cron: '0 */6 * * *'
   workflow_dispatch: # Позволяет запускать вручную кнопкой в интерфейсе GitHub
 
@@ -30,34 +30,27 @@ jobs:
       - name: 📦 Install Python Dependencies
         run: |
           python -m pip install --upgrade pip
-          # Установка необходимых библиотек: 
-          # aiohttp - для запросов, aiohttp_socks - для работы через прокси
+          # Установка необходимых библиотек
           pip install aiohttp aiohttp_socks
 
       - name: 🛠 Install Sing-box
         run: |
-          # Скачиваем и устанавливаем сетевое ядро Sing-box (последнюю версию)
-          # Это необходимо для того, чтобы Python мог подключаться к Reality/VLESS узлам
+          # Скачиваем и устанавливаем сетевое ядро Sing-box
           sudo bash -c "$(curl -L https://sing-box.app/install.sh)"
           sing-box version
 
       - name: 🚀 Run Proxy Validation Bot
-        # Запускаем основной скрипт. В процессе работы он будет 
-        # поднимать временные туннели и проверять реальный IP прокси.
+        # Запускаем основной скрипт
         run: python core/bot.py
 
       - name: 💾 Commit and Push Changes
         run: |
-          # Настройка данных бота для коммита
-          git config --global user.name "Frosty-Bot"
+          git config --global user.name "SunnyBot"
           git config --global user.email "bot@github.com"
           
-          # Проверяем, изменился ли файл subscription.txt
-          git add subscription.txt
+          # Добавляем все важные файлы
+          git add subscription.txt index.html
           
-          # Если изменений нет, git commit выдаст ошибку, поэтому используем || exit 0
           timestamp=$(date -u +'%Y-%m-%d %H:%M:%S UTC')
-          git commit -m "🔄 Auto-update: $timestamp [skip ci]" || exit 0
-          
-          # Отправка изменений в ветку main
+          git commit -m "🚀 Site & Sub Update: $timestamp" || exit 0
           git push
