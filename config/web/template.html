@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SunnyAreral | Cyber Proxy System</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        {{INJECT_CSS}}
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="hero">
+            <div class="status-badge"><div class="dot"></div> System Online</div>
+            <h1>SunnyAreral <span>Network</span></h1>
+            <p>Продвинутая система обхода блокировок. Мы собираем, тестируем и фильтруем лучшие узлы, чтобы вы всегда оставались на связи.</p>
+            <button class="btn-primary" onclick="openModal('rules-modal')">
+                <i class="fa-solid fa-key"></i> Получить доступ
+            </button>
+        </div>
+
+        <div class="grid-layout">
+            <div class="glass-card dashboard">
+                <div class="stat-panel">
+                    <div class="stat-title"><i class="fa-solid fa-gauge-high"></i> Max Speed</div>
+                    <div class="stat-value text-accent">{{MAX_SPEED}}<span>Mbps</span></div>
+                </div>
+                <div class="stat-panel">
+                    <div class="stat-title"><i class="fa-solid fa-server"></i> Active Nodes</div>
+                    <div class="stat-value">{{PROXY_COUNT}}<span>UP</span></div>
+                </div>
+                
+                <div class="sys-log">
+                    <div class="line">> last_sync: <span>{{UPDATE_TIME}} MSK</span></div>
+                    <div class="line">> protocols: <span>VLESS, VMESS, TROJAN, SS, HY2</span></div>
+                    <div class="line">> obfuscation: <span class="active">ACTIVE</span></div>
+                </div>
+
+                <a href="https://t.me/SunnyAreral" target="_blank" class="btn-secondary" style="margin-top: 10px;">
+                    <i class="fa-brands fa-telegram"></i> Telegram Форум
+                </a>
+            </div>
+
+            <div class="glass-card">
+                <h2 style="margin-bottom: 20px; font-size: 1.3rem;">Руководство по настройке</h2>
+                <p style="color: var(--text-dim); font-size: 0.9rem; margin-bottom: 24px;">Выберите вашу платформу, установите рекомендованный клиент и следуйте инструкциям.</p>
+                
+                <div class="tabs">
+                    <button class="tab-btn" id="tab-windows" onclick="switchPlatform('windows')"><i class="fa-brands fa-windows"></i> Windows</button>
+                    <button class="tab-btn" id="tab-android" onclick="switchPlatform('android')"><i class="fa-brands fa-android"></i> Android</button>
+                    <button class="tab-btn" id="tab-ios" onclick="switchPlatform('ios')"><i class="fa-brands fa-apple"></i> iOS/macOS</button>
+                    <button class="tab-btn" id="tab-linux" onclick="switchPlatform('linux')"><i class="fa-brands fa-linux"></i> Linux</button>
+                </div>
+
+                <div class="instruction-box">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                        <h3 style="font-size: 1rem;">1. Выбор клиента</h3>
+                    </div>
+                    
+                    <div class="app-grid" id="app-grid"></div>
+                    
+                    <a href="#" target="_blank" id="download-btn" class="btn-secondary" style="width: 100%; border-color: var(--border-light);">
+                        <span><i class="fa-solid fa-download" style="margin-right: 8px;"></i> Скачать <b id="app-name-display">App</b></span> 
+                    </a>
+
+                    <h3 style="font-size: 1rem; margin-top: 30px;">2. Импорт и запуск</h3>
+                    <div id="instruction-text"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">Created by <a href="https://t.me/SunnyAreral" target="_blank">SunnyAreral Team</a> • 2026</div>
+    </div>
+
+    <!-- MODAL 1: RULES -->
+    <div class="modal-overlay" id="rules-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title"><i class="fa-solid fa-shield-halved" style="color: var(--accent);"></i> Правила использования</div>
+                <button class="btn-close" onclick="closeModal('rules-modal')"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <p style="color: var(--text-dim); font-size: 0.9rem; margin-bottom: 20px;">Пожалуйста, ознакомьтесь с правилами. Нарушение приведет к блокировке узлов провайдерами.</p>
+                
+                <div class="rule-list">
+                    <div class="rule-item">
+                        <i class="fa-solid fa-ban rule-icon" style="color: var(--cyber-red);"></i>
+                        <div>
+                            <h4>Строго без торрентов (P2P)</h4>
+                            <p>Скачивание торрентов через прокси моментально палит сервер и приводит к его бану у хостера. Уважайте чужой труд.</p>
+                        </div>
+                    </div>
+                    <div class="rule-item">
+                        <i class="fa-solid fa-building-columns rule-icon" style="color: var(--cyber-blue);"></i>
+                        <div>
+                            <h4>Банки и Гос. сервисы</h4>
+                            <p>Отключайте VPN при входе в банковские приложения. Банки могут временно заблокировать ваш аккаунт за вход с иностранного IP.</p>
+                        </div>
+                    </div>
+                    <div class="rule-item">
+                        <i class="fa-solid fa-rotate rule-icon" style="color: var(--cyber-green);"></i>
+                        <div>
+                            <h4>Автообновление</h4>
+                            <p>Конфиги обновляются каждые 4 часа. Настройте в клиенте автоматическое обновление подписки раз в 4-6 часов.</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <button class="btn-primary" style="width: 100%; max-width: 100%;" onclick="acceptRules()">
+                    <i class="fa-solid fa-check"></i> Я принимаю условия
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 2: CONFIGS -->
+    <div class="modal-overlay" id="configs-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title"><i class="fa-solid fa-network-wired" style="color: var(--accent);"></i> Выбор маршрута</div>
+                <button class="btn-close" onclick="closeModal('configs-modal')"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <p style="color: var(--text-dim); font-size: 0.85rem; margin-bottom: 20px;">
+                    Алгоритмы отсортировали трафик. Выберите ссылку и скопируйте её в буфер обмена:
+                </p>
+
+                <div class="sub-grid">
+                    <div class="sub-card reality" onclick="copySub('/sub1', 'Обход БС')">
+                        <div class="sub-header">
+                            <div class="sub-title"><i class="fa-solid fa-mask" style="color: var(--cyber-purple);"></i> Обход БС</div>
+                            <div class="sub-badge badge-reality">Verified</div>
+                        </div>
+                        <div class="sub-desc">Трафик мимикрирует под легальные белые сайты (РКН). Максимальная маскировка и стабильность.</div>
+                        <div class="sub-tech">PROTO: VLESS REALITY</div>
+                    </div>
+
+                    <div class="sub-card fast" onclick="copySub('/sub2', 'Обход ЧС')">
+                        <div class="sub-header">
+                            <div class="sub-title"><i class="fa-solid fa-jet-fighter" style="color: var(--cyber-green);"></i> Обход ЧС</div>
+                            <div class="sub-badge badge-fast">Сверхскорость</div>
+                        </div>
+                        <div class="sub-desc">Сырая мощность поверх современных протоколов. Идеально для YouTube 4K, но без глубокой маскировки.</div>
+                        <div class="sub-tech">PROTO: HYSTERIA2, SS, VMESS</div>
+                    </div>
+
+                    <div class="sub-card mix" onclick="copySub('/sub', 'MIX База')">
+                        <div class="sub-header">
+                            <div class="sub-title"><i class="fa-solid fa-infinity" style="color: var(--text-main);"></i> MIX База</div>
+                            <div class="sub-badge badge-mix">Full Access</div>
+                        </div>
+                        <div class="sub-desc">Полный список всех живых серверов (БС + ЧС). Подойдет, если ваш клиент умеет сам тестировать пинг.</div>
+                        <div class="sub-tech">PROTO: ALL SUPPORTED</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast"><i class="fa-solid fa-circle-check"></i> <span id="toast-text">Скопировано!</span></div>
+
+    <script>
+        {{INJECT_JS}}
+    </script>
+</body>
+</html>
