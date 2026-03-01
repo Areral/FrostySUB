@@ -5,11 +5,11 @@ const APP_DATABASE = {
         name: "Throne", icon: "fa-solid fa-chess-rook", url: "https://github.com/throneproj/Throne/releases/latest",
         guide: `
             <div class="step-list">
-                <div class="step-item">Нажмите <b>«Получить доступ»</b> выше и скопируйте ссылку на спелл-карту (подписку).</div>
+                <div class="step-item">Нажмите <b>«Получить доступ»</b> выше и скопируйте ссылку на подписку.</div>
                 <div class="step-item">В клиенте нажмите на <b>«Профили»</b> -> <b>«Добавить профиль из буфера обмена»</b>.</div>
                 <div class="step-item">Выделите все профили (Ctrl+A), нажмите <b>«Профили»</b> -> <b>«Тест задержки (пинга)»</b>.</div>
                 <div class="step-item">Дождитесь надписи <i>«Тест задержек завершён!»</i> в логах снизу.</div>
-                <div class="step-item">Кликните по колонке <b>«Задержка (пинг)»</b> для сортировки.</div>
+                <div class="step-item">Кликните по колонке <b>«Задержка (пинг)»</b> для сортировки от меньшего к большему.</div>
                 <div class="step-item">Сверху установите галочку <b>«Режим TUN»</b> (важно для обхода DPI).</div>
                 <div class="step-item">Выберите сервер с лучшим пингом -> Правая кнопка мыши -> <b>«Запустить»</b>.</div>
             </div>
@@ -28,11 +28,35 @@ const APP_DATABASE = {
             </details>
         `
     },
+    "nekobox": {
+        name: "NekoBox", icon: "fa-solid fa-cat", url: "https://github.com/MatsuriDayo/nekoray/releases/latest",
+        guide: `
+            <div class="step-list">
+                <div class="step-item">Скопируйте ссылку на подписку.</div>
+                <div class="step-item">Перейдите в <b>«Настройки»</b> -> <b>«Группы»</b> -> <b>«Новая группа»</b>.</div>
+                <div class="step-item">Выберите тип <b>«Подписка»</b> и вставьте вашу ссылку. Нажмите Ок.</div>
+                <div class="step-item">Нажмите кнопку <b>«Обновить подписки»</b>.</div>
+                <div class="step-item">Включите галочку <b>«Режим TUN»</b> и запустите выбранный сервер.</div>
+            </div>
+        `
+    },
+    "v2rayn": {
+        name: "v2rayN", icon: "fa-solid fa-v", url: "https://github.com/2dust/v2rayN/releases/latest",
+        guide: `
+            <div class="step-list">
+                <div class="step-item">Скопируйте ссылку на конфиг.</div>
+                <div class="step-item">Перейдите в <b>«Подписки»</b> -> <b>«Настройки подписки»</b> -> <b>«Добавить»</b>.</div>
+                <div class="step-item">Вставьте ссылку в поле <code>Url</code>, сохраните.</div>
+                <div class="step-item">В главном меню нажмите <b>«Обновить подписку»</b>.</div>
+                <div class="step-item">Выделите сервер с хорошим пингом и нажмите <b>Enter</b> для подключения.</div>
+            </div>
+        `
+    },
     "v2rayng": {
         name: "v2rayNG", icon: "fa-solid fa-paper-plane", url: "https://github.com/2dust/v2rayNG/releases/latest",
         guide: `
             <div class="step-list">
-                <div class="step-item">Скопируйте ссылку на маршрут из раздела <b>«Получить доступ»</b>.</div>
+                <div class="step-item">Скопируйте ссылку на подписку.</div>
                 <div class="step-item">В приложении нажмите на <b>«+»</b> (справа сверху) -> <b>«Импорт из буфера обмена»</b>.</div>
                 <div class="step-item">Нажмите три точки -> <b>«Проверка профилей группы»</b>. Дождитесь окончания.</div>
                 <div class="step-item">Снова три точки -> <b>«Сортировка по результатам теста»</b>.</div>
@@ -59,16 +83,14 @@ const APP_DATABASE = {
             </details>
         `
     },
-    "androidtv": {
-        name: "v2rayNG (TV)", icon: "fa-solid fa-tv", url: "https://github.com/2dust/v2rayNG/releases/latest",
+    "v2raytun": {
+        name: "v2RayTun", icon: "fa-solid fa-rocket", url: "https://v2raytun.com/",
         guide: `
             <div class="step-list">
-                <div class="step-item">Зайдите в приложение <b>v2rayNG</b> на вашем телевизоре.</div>
-                <div class="step-item">Отправьте скопированную ссылку на телевизор (например, через Telegram "Избранное" на TV).</div>
-                <div class="step-item">Нажмите <b>«+»</b> -> <b>«Импорт из буфера обмена»</b> (или используйте ручной ввод URL).</div>
-                <div class="step-item">Нажмите три точки -> <b>«Проверка профилей группы»</b>.</div>
-                <div class="step-item">Там же выберите <b>«Сортировка по результатам теста»</b>.</div>
-                <div class="step-item">Выберите зеленый сервер и нажмите кнопку <b>▶️</b> для старта.</div>
+                <div class="step-item">Скопируйте ссылку на подписку.</div>
+                <div class="step-item">Откройте v2RayTun и перейдите в раздел управления серверами.</div>
+                <div class="step-item">Нажмите иконку <b>добавления</b> -> выберите <b>«Импорт из буфера обмена»</b>.</div>
+                <div class="step-item">Обновите подписку, выберите сервер с зеленым пингом и нажмите огромную кнопку старта.</div>
             </div>
         `
     },
@@ -101,11 +123,10 @@ const APP_DATABASE = {
                 <div class="step-item">Зажмите палец на названии подписки и выберите <b>«Latency Test»</b>.</div>
                 <div class="step-item">Выберите лучший узел и нажмите главную кнопку подключения.</div>
             </div>
-            <div class="mt-2 text-sm" style="color:var(--text-dim); font-style:italic;">* Рекомендуется для iOS: без сбора данных, поддерживает кастомные DNS-over-HTTPS.</div>
         `
     },
     "hiddify": {
-        name: "Hiddify", icon: "fa-brands fa-apple", url: "https://github.com/hiddify/hiddify-app/releases/latest",
+        name: "Hiddify", icon: "fa-solid fa-shield-halved", url: "https://github.com/hiddify/hiddify-app/releases/latest",
         guide: `
             <div class="step-list">
                 <div class="step-item">Скопируйте ссылку на подписку.</div>
@@ -126,12 +147,10 @@ const APP_DATABASE = {
 };
 
 const PLATFORMS = {
-    windows:['throne', 'hiddify'],
-    android:['v2rayng', 'hiddify'],
-    androidtv:['androidtv'],
-    ios:['streisand', 'v2box'],
-    linux:['throne', 'hiddify'],
-    mac:['hiddify', 'throne']
+    windows:['throne', 'nekobox', 'v2rayn', 'hiddify'],
+    android:['v2rayng', 'v2raytun', 'nekobox', 'hiddify'],
+    ios:['streisand', 'v2box', 'v2raytun', 'hiddify'],
+    linux:['throne', 'nekobox', 'hiddify']
 };
 
 let currentPlatform = 'windows';
@@ -139,10 +158,8 @@ let currentAppId = PLATFORMS['windows'][0];
 
 function init() {
     const ua = navigator.userAgent.toLowerCase();
-    if (ua.includes("android") && (ua.includes("tv") || window.innerWidth > 1000)) currentPlatform = 'androidtv';
-    else if (ua.includes("android")) currentPlatform = 'android';
-    else if (ua.includes("iphone") || ua.includes("ipad")) currentPlatform = 'ios';
-    else if (ua.includes("macintosh") || ua.includes("mac os")) currentPlatform = 'mac';
+    if (ua.includes("android")) currentPlatform = 'android';
+    else if (ua.includes("iphone") || ua.includes("ipad") || ua.includes("macintosh")) currentPlatform = 'ios';
     else if (ua.includes("linux")) currentPlatform = 'linux';
     else currentPlatform = 'windows';
     
