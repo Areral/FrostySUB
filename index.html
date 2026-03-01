@@ -72,6 +72,12 @@ h1, h2, h3, h4 { font-weight: 800; letter-spacing: -0.5px; }
     100% { box-shadow: 0 0 10px rgba(139, 92, 246, 0.2); } 
 }
 
+/* Magic Touhou Animation for Network Text */
+@keyframes touhou-magic {
+    0%, 100% { text-shadow: 0 0 15px rgba(225, 29, 72, 0.4), 0 0 30px rgba(225, 29, 72, 0.2); transform: translateY(0); }
+    50% { text-shadow: 0 0 25px rgba(225, 29, 72, 0.8), 0 0 50px rgba(139, 92, 246, 0.4); transform: translateY(-3px); }
+}
+
 /* --- SIDE NAVIGATION --- */
 .side-nav {
     position: fixed; right: 30px; top: 50%; transform: translateY(-50%);
@@ -79,7 +85,7 @@ h1, h2, h3, h4 { font-weight: 800; letter-spacing: -0.5px; }
 }
 .nav-btn {
     display: flex; align-items: center; justify-content: flex-end; gap: 15px;
-    background: none; border: none; cursor: pointer; group; opacity: 0.4; transition: var(--trans);
+    background: none; border: none; cursor: pointer; opacity: 0.4; transition: var(--trans);
 }
 .nav-btn:hover, .nav-btn.active { opacity: 1; }
 .nav-label {
@@ -98,7 +104,15 @@ h1, h2, h3, h4 { font-weight: 800; letter-spacing: -0.5px; }
 @media (max-width: 1024px) { .side-nav { display: none; } }
 
 /* --- SECTIONS & CARDS --- */
-section { min-height: 80vh; display: flex; flex-direction: column; justify-content: center; padding: 60px 0; border-bottom: 1px solid rgba(255,255,255,0.02); }
+section { 
+    min-height: 80vh; 
+    display: flex; 
+    flex-direction: column; 
+    justify-content: center; 
+    padding: 60px 0; 
+    border-bottom: 1px solid rgba(255,255,255,0.02); 
+    scroll-margin-top: 40px;
+}
 section:last-of-type { border-bottom: none; }
 
 .glass-card { 
@@ -119,8 +133,12 @@ section:last-of-type { border-bottom: none; }
 }
 .status-badge .dot { width: 8px; height: 8px; background: var(--touhou-purple); border-radius: 50%; animation: pulse-glow 2s infinite; }
 
-.hero h1 { font-size: clamp(3rem, 8vw, 6rem); margin-bottom: 20px; line-height: 1; letter-spacing: -3px; text-transform: uppercase; font-style: italic;}
-.hero h1 span { color: var(--touhou-red); display: inline-block; }
+.hero h1 { font-size: clamp(3rem, 8vw, 6rem); margin-bottom: 20px; line-height: 1.1; letter-spacing: -3px; text-transform: uppercase; font-style: italic;}
+.hero h1 span { 
+    color: var(--touhou-red); 
+    display: inline-block; 
+    animation: touhou-magic 4s ease-in-out infinite; 
+}
 .hero p { color: var(--text-dim); font-size: clamp(1rem, 3vw, 1.2rem); max-width: 800px; margin: 0 auto 40px auto; line-height: 1.8; text-align: center; }
 
 /* --- BUTTONS --- */
@@ -180,7 +198,7 @@ section:last-of-type { border-bottom: none; }
 .app-card {
     background: rgba(0,0,0,0.3); border: 1px solid var(--border);
     border-radius: 16px; padding: 20px 10px; cursor: pointer;
-    display: flex; flex-direction: column; align-items: center; gap: 12px; transition: var(--trans);
+    display: flex; flex-direction: column; align-items: center; gap: 12px; transition: var(--trans); text-align: center;
 }
 .app-card:hover { background: rgba(255,255,255,0.02); transform: translateY(-3px); border-color: rgba(255,255,255,0.1); }
 .app-card.selected { border-color: var(--touhou-purple); background: rgba(139, 92, 246, 0.1); box-shadow: 0 10px 20px rgba(139, 92, 246, 0.1); }
@@ -309,12 +327,38 @@ section:last-of-type { border-bottom: none; }
 }
 .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
 
-/* --- FOOTER & DISCLAIMER --- */
+/* --- STRICT LEGAL DISCLAIMER --- */
 .disclaimer-block {
-    margin-top: 60px; padding: 30px; border: 1px solid rgba(225, 29, 72, 0.2); border-radius: 24px;
-    background: rgba(225, 29, 72, 0.03); font-size: 0.9rem; color: var(--text-dim); text-align: justify; line-height: 1.7;
+    background: #000;
+    border: 1px solid #333;
+    padding: 30px;
+    border-radius: 12px;
+    font-family: 'Inter', 'Segoe UI', sans-serif;
+    font-size: 0.85rem;
+    color: #888;
+    line-height: 1.6;
+    text-align: left;
 }
-.disclaimer-block b { color: var(--touhou-red); font-size: 1.1rem; display: block; margin-bottom: 16px; text-align: center; letter-spacing: 1px;}
+.disclaimer-block h4 {
+    color: #fff;
+    font-size: 1.2rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 20px;
+    text-align: center;
+    font-weight: 800;
+}
+.disclaimer-block p {
+    margin-bottom: 12px;
+}
+.disclaimer-block p:last-child {
+    margin-bottom: 0;
+}
+.disclaimer-block b {
+    color: #ccc;
+    font-weight: 700;
+}
+
 .footer { text-align: center; color: var(--text-dark); font-size: 0.9rem; padding: 40px 0; font-weight: 700; }
 .footer a { color: var(--text-dim); text-decoration: none; transition: 0.3s; border-bottom: 1px solid var(--border); padding-bottom: 2px;}
 .footer a:hover { color: var(--touhou-sakura); border-color: var(--touhou-sakura); }
@@ -337,12 +381,16 @@ section:last-of-type { border-bottom: none; }
             <span class="nav-label">Гайд</span>
             <div class="nav-dot"></div>
         </button>
-        <button class="nav-btn" data-target="knowledge">
-            <span class="nav-label">Архив</span>
+        <button class="nav-btn" data-target="theory_bs">
+            <span class="nav-label">БС vs ЧС</span>
             <div class="nav-dot"></div>
         </button>
-        <button class="nav-btn" data-target="legal">
-            <span class="nav-label">Протоколы</span>
+        <button class="nav-btn" data-target="theory_isp">
+            <span class="nav-label">Приватность</span>
+            <div class="nav-dot"></div>
+        </button>
+        <button class="nav-btn" data-target="contacts">
+            <span class="nav-label">Контакты</span>
             <div class="nav-dot"></div>
         </button>
     </nav>
@@ -368,15 +416,15 @@ section:last-of-type { border-bottom: none; }
                 <div class="glass-card dashboard">
                     <div class="stat-panel">
                         <div class="stat-title"><i class="fa-solid fa-gauge-high"></i> Max Speed</div>
-                        <div class="stat-value text-touhou">364<span>Mbps</span></div>
+                        <div class="stat-value text-touhou">130<span>Mbps</span></div>
                     </div>
                     <div class="stat-panel">
                         <div class="stat-title"><i class="fa-solid fa-server"></i> Active Nodes</div>
-                        <div class="stat-value">446<span>UP</span></div>
+                        <div class="stat-value">216<span>UP</span></div>
                     </div>
                     
                     <div class="sys-log">
-                        <div class="line">> last_sync: <span>01.03 23:49 MSK</span></div>
+                        <div class="line">> last_sync: <span>02.03 00:17 MSK</span></div>
                         <div class="line">> protocols: <span>VLESS, VMESS, TROJAN, SS, HY2</span></div>
                         <div class="line">> obfuscation: <span class="magic">REALITY_ACTIVE</span></div>
                     </div>
@@ -423,7 +471,7 @@ section:last-of-type { border-bottom: none; }
                     <p><b>SunnyAreral Network</b> — это независимая технологическая инициатива, созданная для обеспечения стабильного доступа к информации в условиях жесткой сетевой цензуры и работы систем глубокой фильтрации трафика (DPI/ТСПУ).</p>
                     <p>Проект представляет собой автоматизированный агрегатор и верификатор публичных VPN-конфигураций. Мы не просто собираем ссылки, мы подвергаем их многоступенчатой проверке. Каждые несколько часов наш матричный движок сканирует десятки тысяч узлов (<code>VLESS</code>, <code>VMess</code>, <code>Trojan</code>, <code>Shadowsocks</code>, <code>Hysteria2</code>), отсеивая до 98% мусора, нерабочих серверов и "пустышек".</p>
                     <p><b>Почему это важно сегодня?</b><br>
-                    Классические протоколы (OpenVPN, WireGuard, L2TP) на территории РФ практически полностью блокируются по паттернам трафика. Платные и бесплатные сервисы на их базе становятся бесполезны. Наша коллекция фокусируется на современных методах обфускации (маскировки), таких как <code>VLESS Reality</code> и <code>XHTTP</code>, которые мимикрируют под обычный HTTPS-трафик, делая ваше соединение невидимым для провайдера.</p>
+                    Классические протоколы (OpenVPN, WireGuard, L2TP) практически полностью блокируются по паттернам трафика. Платные и бесплатные сервисы на их базе становятся бесполезны. Наша коллекция фокусируется на современных методах обфускации (маскировки), таких как <code>VLESS Reality</code> и <code>XHTTP</code>, которые мимикрируют под обычный HTTPS-трафик, делая ваше соединение невидимым для провайдера.</p>
                     <p>Весь процесс полностью прозрачен: скрипт проводит реальные тесты на доступность из разных точек, замеряет задержку и проверяет пропускную способность (загрузка 50MB чанков). В итоговые подписки попадают только те узлы, которые гарантированно "пробивают" барьеры и обеспечивают комфортную скорость.</p>
                 </div>
             </div>
@@ -454,13 +502,12 @@ section:last-of-type { border-bottom: none; }
             </div>
         </section>
 
-        <!-- БАЗА ЗНАНИЙ -->
-        <section id="knowledge" class="content-section">
-            
-            <div class="glass-card reveal mb-8">
+        <!-- БС vs ЧС -->
+        <section id="theory_bs" class="content-section reveal">
+            <div class="glass-card">
                 <h2><i class="fa-solid fa-yin-yang" style="color: var(--touhou-red);"></i> Граница Фантазии: БС vs ЧС</h2>
                 <div class="text-block">
-                    <p>Перед активацией выбранной спелл-карты (подписки) необходимо провести калибровку вашего канала. Откройте <i>Яндекс</i>, <i>ВК</i> или <i>Госуслуги</i>. Если эти порталы не отвечают — барьер между мирами закрыт полностью, у вас нет физического соединения, и никакой протокол здесь не поможет.</p>
+                    <p>Перед активацией выбранной подписки необходимо провести калибровку вашего канала. Откройте <i>Яндекс</i>, <i>ВК</i> или <i>Госуслуги</i>. Если эти порталы не отвечают — барьер между сетями закрыт полностью, у вас нет физического соединения, и никакой протокол здесь не поможет.</p>
                     <p>Если же локальные ресурсы доступны, определите тип действующего на вас барьера и выберите соответствующий маршрут:</p>
                     
                     <table class="cyber-table">
@@ -470,7 +517,7 @@ section:last-of-type { border-bottom: none; }
                         </tr>
                         <tr>
                             <td><b>Философия:</b> «Разрешено всё, что не запрещено». Вы находитесь в стандартной реальности.</td>
-                            <td><b>Философия:</b> «Запрещено всё, что не разрешено». Вы заперты за Барьером Хакурей.</td>
+                            <td><b>Философия:</b> «Запрещено всё, что не разрешено». Жесткий барьер фильтрации.</td>
                         </tr>
                         <tr>
                             <td><b>Состояние сети:</b> Кабельный интернет или мобильный без жестких "блэкаутов". Google, Telegram и App Store открываются без помощи извне.</td>
@@ -481,8 +528,8 @@ section:last-of-type { border-bottom: none; }
                             <td><b>Целевые данные:</b> Скрытое проникновение через "Gaps" (границы). Задача — доставить сообщение в мессенджере или прочитать почту.</td>
                         </tr>
                         <tr>
-                            <td><b>Рекомендуемые Спелл-карты:</b> <code>Hysteria2</code>, <code>Shadowsocks</code>, <code>VLESS</code>. Главный приоритет — чистая мощность.</td>
-                            <td><b>Рекомендуемые Спелл-карты:</b> Только <code>VLESS Reality</code>. Трафик полностью маскируется под легальные сервисы.</td>
+                            <td><b>Рекомендуемые подписки:</b> <code>Hysteria2</code>, <code>Shadowsocks</code>, <code>VLESS</code>. Главный приоритет — чистая мощность.</td>
+                            <td><b>Рекомендуемые подписки:</b> Только <code>VLESS Reality</code>. Трафик полностью маскируется под легальные сервисы.</td>
                         </tr>
                     </table>
                     
@@ -491,62 +538,70 @@ section:last-of-type { border-bottom: none; }
                     </blockquote>
                 </div>
             </div>
+        </section>
 
-            <div class="glass-card reveal">
+        <!-- ПРОВАЙДЕРЫ И DOH -->
+        <section id="theory_isp" class="content-section reveal">
+            <div class="glass-card">
                 <h2><i class="fa-solid fa-eye-slash" style="color: var(--touhou-purple);"></i> Иллюзия наблюдения: что видит провайдер?</h2>
                 <div class="text-block">
-                    <p>Существует миф, что интернет-провайдер — это "всевидящее око", которое читает вашу переписку и видит каждое движение. В реальности, провайдер — это ленивый страж на границе миров. Благодаря повсеместному шифрованию <b>HTTPS</b> (TLS), ваше соединение защищено магическим барьером.</p>
+                    <p>Существует миф, что интернет-провайдер — это "всевидящее око", которое читает вашу переписку и видит каждое движение. В реальности, благодаря повсеместному шифрованию <b>HTTPS</b> (TLS), ваше соединение надежно защищено.</p>
                     
                     <p><b>Что провайдер видит на самом деле:</b></p>
                     <ul>
-                        <li><b>Конечный IP-адрес:</b> Он знает, к какому серверу вы летите, но не знает, зачем.</li>
-                        <li><b>Название домена (через SNI):</b> Из-за особенностей протоколов, при установке связи название сайта (например, <code>google.com</code>) передается открытым текстом. Это и позволяет "стражам" блокировать ресурсы по спискам.</li>
-                        <li><b>Объем и время трафика:</b> Он видит "вес" данных, но для него это просто шум (беспорядочное <i>даммаку</i> из байтов).</li>
+                        <li><b>Конечный IP-адрес:</b> Он знает, к какому серверу вы обращаетесь.</li>
+                        <li><b>Название домена (через SNI):</b> При установке связи название сайта (например, <code>google.com</code>) передается открытым текстом. Это позволяет провайдерам блокировать ресурсы по спискам.</li>
+                        <li><b>Объем и время трафика:</b> Он видит "вес" передаваемых данных, но не их содержимое.</li>
                     </ul>
 
                     <p><b>Чего он НЕ видит КАТЕГОРИЧЕСКИ:</b> Конкретные страницы, которые вы открываете внутри сайта, ваши поисковые запросы, сообщения в чатах или видео, которые вы смотрите. Для него всё это — зашифрованный черный ящик.</p>
 
                     <p style="margin-top: 25px;"><b><i class="fa-solid fa-scroll"></i> Гримуар DNS-over-HTTPS (DoH)</b></p>
-                    <p>Обычный DNS — это как открытая записка: "Я хочу пойти на <code>twitter.com</code>". Провайдер перехватывает её и говорит: "Тебе туда нельзя". <b>DoH</b> прячет эту записку внутрь стандартного HTTPS-запроса, делая ваш выбор домена невидимым для локального цензора.</p>
+                    <p>Обычный DNS — это как открытая записка: "Я хочу пойти на сайт X". Провайдер перехватывает её и блокирует доступ. <b>DoH</b> прячет этот запрос внутрь стандартного HTTPS, делая ваш выбор домена невидимым для локального цензора.</p>
                     
                     <p><b>Проверенные серверы DoH для настройки в браузере или системе:</b></p>
                     <ul>
                         <li><code>https://dns.quad9.net/dns-query</code> — <b>Quad9:</b> Максимальная приватность (Швейцария) + автоматическая фильтрация вредоносных узлов.</li>
-                        <li><code>https://dns.adguard-dns.com/dns-query</code> — <b>AdGuard:</b> Известный защитник, который на лету вырезает рекламные трекеры и шпионские скрипты.</li>
+                        <li><code>https://dns.adguard-dns.com/dns-query</code> — <b>AdGuard:</b> Защитник, который на лету вырезает рекламные трекеры и шпионские скрипты.</li>
                         <li><code>https://dns.cloudflare.com/dns-query</code> — <b>Cloudflare:</b> Самый быстрый и стабильный вариант, база для большинства современных сетей.</li>
                     </ul>
 
                     <p style="margin-top: 25px;"><b><i class="fa-solid fa-user-ninja"></i> Приватные браузеры: уход от телеметрии</b></p>
-                    <p>Даже если ваш канал зашифрован, сам браузер может "сливать" информацию о вас (телеметрию) своим создателям. Чтобы оставаться призраком в сети, используйте инструменты с открытым кодом (Open-Source):</p>
+                    <p>Даже если ваш канал зашифрован, сам браузер может передавать телеметрию создателям. Для максимальной безопасности используйте инструменты с открытым исходным кодом (Open-Source):</p>
                     <ol>
-                        <li><b>Librewolf</b> — Мощно кастомизированный Firefox. Из него вырезаны все модули слежки Mozilla, а блокировщик <i>uBlock Origin</i> встроен прямо в ядро.</li>
-                        <li><b>Ungoogled Chromium</b> — Тот же привычный Chrome, но из которого хирургическим путем удалили все связи с Google и модули сбора данных. Чистая архитектура.</li>
+                        <li><b>Librewolf</b> — Мощно кастомизированный Firefox. Из него вырезаны все модули слежки, а блокировщик <i>uBlock Origin</i> встроен прямо в ядро.</li>
+                        <li><b>Ungoogled Chromium</b> — Тот же привычный Chrome, но из которого хирургическим путем удалили все связи с Google и модули сбора данных.</li>
                         <li><b>Cromite</b> — Обязательный артефакт для Android. Позволяет не только блокировать рекламу, но и скрывать "цифровой отпечаток" вашего устройства.</li>
                     </ol>
                     
                     <blockquote>
-                        <i class="fa-solid fa-circle-exclamation"></i> <b>Важно:</b> Никогда не используйте браузеры от крупных корпораций с сомнительной репутацией (особенно Yandex). Они являются прямым инструментом сбора данных и анализа вашего трафика.
+                        <i class="fa-solid fa-circle-exclamation"></i> <b>Важно:</b> Никогда не используйте браузеры от крупных корпораций с сомнительной репутацией. Они являются прямым инструментом сбора данных и анализа вашего трафика.
                     </blockquote>
                 </div>
             </div>
         </section>
 
-        <!-- ДИСКЛЕЙМЕР -->
-        <section id="legal" class="content-section reveal">
-            <div class="disclaimer-block">
-                <b><i class="fa-solid fa-shield-virus"></i> ГРАНИЦА ОТВЕТСТВЕННОСТИ: ПРОТОКОЛ [NULL]</b>
-                
-                <p>1. <b>Информационный статус:</b> Данный ресурс является автоматизированным узлом агрегации метаданных. Владелец проекта НЕ является поставщиком, владельцем или оператором серверов, конфигурации которых представлены в списках. Все данные получены методом парсинга открытых публичных репозиториев и чатов. Мы лишь "Gap" (граница), через которую вы видите то, что уже существует в сети.</p>
-                
-                <p>2. <b>Научно-образовательный вектор:</b> Весь материал, включая инструкции по DoH и обфускации, предоставляется исключительно в исследовательских, ознакомительных и научных целях. Проект НЕ является рекламой VPN-сервисов или призывом к их использованию. Мы изучаем архитектуру сетевых барьеров, а не способы их нарушения.</p>
-                
-                <p>3. <b>Отказ от ответственности:</b> Автор не несет ответственности за любые последствия применения данных конфигураций. Мы не побуждаем, не одобряем и не оправдываем использование данных инструментов для совершения действий, противоречащих вашему локальному законодательству. Любая активация спелл-карты (подписки) — это ваш личный выбор и ваш риск.</p>
-                
-                <p>4. <b>Легитимное использование:</b> Мы настоятельно рекомендуем использовать данные инструменты исключительно для защиты персональных данных в открытых Wi-Fi сетях, обеспечения безопасности удаленного доступа и в рамках проведения этичного тестирования на проникновение (Penetration Testing).</p>
+        <!-- CONTACTS & LEGAL -->
+        <section id="contacts" class="content-section reveal">
+            <div class="glass-card mb-8">
+                <h2><i class="fa-brands fa-telegram" style="color: var(--cyber-blue);"></i> Сообщество и Контакты</h2>
+                <div class="text-block text-center py-6">
+                    <p>Присоединяйтесь к нашему Telegram-форуму для обсуждения работы ядра, получения помощи по настройке клиентов и общения с другими участниками сети.</p>
+                    <a href="https://t.me/SunnyAreral" target="_blank" class="btn-primary" style="margin-top: 20px;">
+                        <i class="fa-solid fa-paper-plane"></i> Перейти в Telegram
+                    </a>
+                </div>
+            </div>
 
-                <blockquote>
-                    <i class="fa-solid fa-gavel"></i> <b>Предупреждение:</b> Входя в этот поток данных, вы автоматически подтверждаете, что осознаете ответственность за свои действия. Если ваше восприятие реальности конфликтует с данными условиями — немедленно разорвите соединение.
-                </blockquote>
+            <!-- STRICT LEGAL DISCLAIMER -->
+            <div class="disclaimer-block">
+                <h4>Юридическое уведомление и отказ от ответственности</h4>
+                <p>1. <b>Статус ресурса:</b> Данный сайт представляет собой автоматизированный программный парсер (агрегатор метаданных). Владелец ресурса не является владельцем, оператором или провайдером VPN-серверов, конфигурации которых здесь публикуются. Вся информация собирается скриптом в автоматическом режиме из открытых, общедоступных источников (репозитории, форумы, каналы).</p>
+                <p>2. <b>Цель проекта:</b> Весь материал, включая текстовые инструкции и технические данные, предоставляется исключительно в ознакомительных, исследовательских и образовательных целях. Проект не является коммерческим сервисом, не осуществляет продажу услуг и не занимается рекламой VPN-провайдеров.</p>
+                <p>3. <b>Отказ от ответственности (Disclaimer of Liability):</b> Автор проекта не несет никакой юридической или финансовой ответственности за последствия использования предоставленной информации. Мы не призываем, не поощряем и не оправдываем использование технологий для совершения действий, нарушающих законодательство вашей юрисдикции. Использование представленных конфигураций осуществляется пользователем добровольно, на свой страх и риск.</p>
+                <p>4. <b>Допустимое использование:</b> Мы настоятельно рекомендуем применять данные технологии исключительно для легитимных целей: защиты персональных данных при подключении к открытым (публичным) сетям Wi-Fi, обеспечения информационной безопасности устройств и корпоративного удаленного доступа.</p>
+                <br>
+                <p><b>ВНИМАНИЕ:</b> Находясь на данном сайте и используя его материалы, вы автоматически подтверждаете свое согласие с данными условиями. Если вы не согласны с изложенными правилами, вам следует немедленно покинуть данный ресурс.</p>
             </div>
         </section>
 
@@ -609,31 +664,31 @@ section:last-of-type { border-bottom: none; }
                 </p>
 
                 <div class="sub-grid">
-                    <div class="sub-card reality" onclick="copySub('/sub1', 'Phantom Walk (БС)')">
+                    <div class="sub-card reality" onclick="copySub('/sub1', 'Обход БС')">
                         <div class="sub-header">
                             <div class="sub-title"><i class="fa-solid fa-mask" style="color: #c4b5fd;"></i> Обход БС</div>
                             <div class="sub-badge badge-reality">Phantom Walk</div>
                         </div>
                         <div class="sub-desc">Для мобильных сетей с жесткими ограничениями. Трафик мимикрирует под легальные сайты.</div>
-                        <div class="sub-tech">SPELLCARD: VLESS REALITY</div>
+                        <div class="sub-tech">PROTO: VLESS REALITY</div>
                     </div>
 
-                    <div class="sub-card fast" onclick="copySub('/sub2', 'Tengu Dash (ЧС)')">
+                    <div class="sub-card fast" onclick="copySub('/sub2', 'Обход ЧС')">
                         <div class="sub-header">
                             <div class="sub-title"><i class="fa-solid fa-jet-fighter" style="color: #6ee7b7;"></i> Обход ЧС</div>
                             <div class="sub-badge badge-fast">Tengu Dash</div>
                         </div>
                         <div class="sub-desc">Для стандартного интернета. Максимальная скорость для стриминга и тяжелого трафика.</div>
-                        <div class="sub-tech">SPELLCARD: HYSTERIA2, SS, VMESS</div>
+                        <div class="sub-tech">PROTO: HYSTERIA2, SS, VMESS</div>
                     </div>
 
-                    <div class="sub-card mix" onclick="copySub('/sub', 'Master Spark (MIX)')">
+                    <div class="sub-card mix" onclick="copySub('/sub', 'MIX База')">
                         <div class="sub-header">
                             <div class="sub-title"><i class="fa-solid fa-infinity" style="color: #fda4af;"></i> MIX База</div>
                             <div class="sub-badge badge-mix">Master Spark</div>
                         </div>
                         <div class="sub-desc">Полный гримуар всех живых узлов. Идеально для ПК клиентов с автоматическим URL-тестом.</div>
-                        <div class="sub-tech">SPELLCARD: ALL PROTOCOLS</div>
+                        <div class="sub-tech">PROTO: ALL PROTOCOLS</div>
                     </div>
                 </div>
             </div>
@@ -898,7 +953,7 @@ function copySub(path, name) {
     navigator.clipboard.writeText(fullUrl).then(() => {
         closeModal('configs-modal');
         const toast = document.getElementById('toast');
-        document.getElementById('toast-text').innerText = `Спелл-карта [${name}] скопирована!`;
+        document.getElementById('toast-text').innerText = `Подписка [${name}] скопирована!`;
         toast.classList.add('show');
         setTimeout(() => toast.classList.remove('show'), 3500);
     });
