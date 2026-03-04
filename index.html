@@ -1,0 +1,1136 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Scarlet Devil | Protocol</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        :root {
+    /* Lighter, luxurious Scarlet Mansion Palette */
+    --bg-void: #0f0508; 
+    --bg-surface: rgba(28, 14, 20, 0.65);
+    --bg-card: rgba(38, 18, 28, 0.45);
+    --bg-hover: rgba(56, 24, 40, 0.8);
+    
+    /* Scarlet Devil Accents */
+    --accent: #f43f5e; 
+    --touhou-red: #e11d48;
+    --touhou-crimson: #9f1239;
+    --touhou-purple: #8b5cf6;
+    --touhou-sakura: #f472b6;
+    
+    --cyber-blue: #38bdf8;
+    --cyber-green: #10b981;
+    
+    --text-main: #ffffff;
+    --text-dim: #cbd5e1;
+    --text-dark: #71717a;
+    
+    --border: rgba(225, 29, 72, 0.15);
+    --border-light: rgba(244, 114, 182, 0.3);
+    
+    --glass-blur: blur(20px);
+    --trans: all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+body {
+    font-family: 'Manrope', sans-serif;
+    background-color: var(--bg-void);
+    color: var(--text-main);
+    min-height: 100vh;
+    display: flex; justify-content: center;
+    background-image: 
+        radial-gradient(circle at 10% 20%, rgba(225, 29, 72, 0.08) 0%, transparent 50%),
+        radial-gradient(circle at 90% 80%, rgba(139, 92, 246, 0.06) 0%, transparent 60%),
+        linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+    background-size: 100% 100%, 100% 100%, 60px 60px, 60px 60px;
+    background-attachment: fixed;
+    line-height: 1.6;
+    overflow-x: hidden;
+    scroll-behavior: smooth;
+    width: 100vw;
+}
+
+/* CRITICAL */
+.container { 
+    width: 100%; 
+    max-width: 1200px; 
+    z-index: 10; 
+    display: flex; 
+    flex-direction: column; 
+    padding: 0 15px;
+}
+@media (min-width: 768px) {
+    .container { padding: 0 40px; }
+}
+@media (min-width: 1200px) {
+    .container { padding: 0; }
+}
+
+h1, h2, h3, h4 { font-weight: 800; letter-spacing: -0.5px; }
+.mono { font-family: 'JetBrains Mono', monospace; }
+.text-touhou { color: var(--touhou-sakura); }
+
+/* --- ANIMATIONS --- */
+.reveal { opacity: 0; transform: translateY(40px); transition: var(--trans); }
+.reveal.active { opacity: 1; transform: translateY(0); }
+
+@keyframes pulse-glow { 
+    0% { box-shadow: 0 0 10px rgba(225, 29, 72, 0.3); } 
+    50% { box-shadow: 0 0 25px rgba(225, 29, 72, 0.6); } 
+    100% { box-shadow: 0 0 10px rgba(225, 29, 72, 0.3); } 
+}
+
+@keyframes touhou-magic {
+    0%, 100% { text-shadow: 0 0 15px rgba(225, 29, 72, 0.5), 0 0 30px rgba(225, 29, 72, 0.3); transform: translateY(0); }
+    50% { text-shadow: 0 0 25px rgba(225, 29, 72, 0.9), 0 0 50px rgba(244, 114, 182, 0.5); transform: translateY(-3px); }
+}
+
+/* Effects Animations */
+.danmaku-bullet {
+    position: fixed;
+    border-radius: 50%;
+    box-shadow: 0 0 12px currentColor;
+    pointer-events: none;
+    z-index: 9999;
+    animation: fall linear forwards;
+}
+@keyframes fall { to { transform: translateY(100vh); } }
+
+.bat-spirit {
+    position: fixed;
+    font-size: 1.5rem;
+    pointer-events: none;
+    z-index: 9999;
+    animation: fly linear forwards;
+    filter: drop-shadow(0 0 8px currentColor);
+}
+@keyframes fly { to { transform: translateX(120vw) translateY(var(--y-end)); } }
+
+.scarlet-mist-layer {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+    background: radial-gradient(circle at 50% 120%, rgba(225, 29, 72, 0.15) 0%, transparent 70%);
+    opacity: 0;
+    transition: opacity 1.5s ease;
+    animation: mist-pulse 6s infinite alternate ease-in-out;
+}
+.scarlet-mist-layer.active { opacity: 1; }
+@keyframes mist-pulse {
+    0% { transform: scale(1) translateY(0); }
+    100% { transform: scale(1.05) translateY(-2vh); }
+}
+
+/* --- INTERACTIVE FUN PANEL --- */
+.fun-panel {
+    position: fixed; bottom: 30px; left: 30px; display: flex; flex-direction: column; gap: 12px; z-index: 100;
+}
+.fun-btn {
+    width: 45px; height: 45px; border-radius: 50%; border: 1px solid var(--border);
+    background: var(--bg-surface); color: var(--text-dim); font-size: 1.2rem;
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+    backdrop-filter: blur(10px); transition: var(--trans);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+}
+.fun-btn:hover { background: rgba(225, 29, 72, 0.2); color: var(--touhou-sakura); border-color: var(--touhou-sakura); transform: translateX(5px); }
+.fun-btn.active { background: var(--touhou-red); color: #fff; border-color: var(--touhou-red); box-shadow: 0 0 15px var(--touhou-red); }
+
+@media (max-width: 1024px) { .fun-panel { display: none; } }
+
+/* --- SIDE NAVIGATION --- */
+.side-nav {
+    position: fixed; right: 30px; top: 50%; transform: translateY(-50%);
+    display: flex; flex-direction: column; gap: 20px; z-index: 100;
+}
+.nav-btn {
+    display: flex; align-items: center; justify-content: flex-end; gap: 15px;
+    background: none; border: none; cursor: pointer; opacity: 0.4; transition: var(--trans);
+}
+.nav-btn:hover, .nav-btn.active { opacity: 1; }
+.nav-label {
+    font-size: 0.65rem; text-transform: uppercase; letter-spacing: 2px; font-weight: 800;
+    color: #fff; background: rgba(0,0,0,0.5); padding: 4px 10px; border-radius: 4px;
+    opacity: 0; transform: translateX(10px); transition: var(--trans); pointer-events: none;
+}
+.nav-btn:hover .nav-label, .nav-btn.active .nav-label { opacity: 1; transform: translateX(0); }
+.nav-dot {
+    width: 8px; height: 8px; border-radius: 50%; background: transparent; border: 1px solid var(--text-dim); transition: var(--trans);
+}
+.nav-btn.active .nav-dot {
+    background: var(--touhou-red); border-color: var(--touhou-red); transform: scale(1.5); box-shadow: 0 0 10px var(--touhou-red);
+}
+
+@media (max-width: 1024px) { .side-nav { display: none; } }
+
+/* --- SECTIONS & CARDS --- */
+section { 
+    display: flex; 
+    flex-direction: column; 
+    justify-content: center; 
+    padding: 30px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.02); 
+    scroll-margin-top: 20px;
+    width: 100%;
+}
+@media (min-width: 768px) {
+    section { padding: 40px 0; }
+}
+
+section:last-of-type { border-bottom: none; }
+
+.glass-card { 
+    background: var(--bg-card); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--border); border-radius: 20px; 
+    padding: 20px;
+    box-shadow: 0 15px 30px rgba(0,0,0,0.3); 
+    width: 100%; 
+    transition: var(--trans);
+    overflow: hidden;
+}
+@media (min-width: 768px) {
+    .glass-card { padding: 30px; border-radius: 24px; box-shadow: 0 20px 40px rgba(0,0,0,0.3); }
+}
+.glass-card:hover { border-color: rgba(225, 29, 72, 0.2); background: rgba(45, 18, 28, 0.5); }
+
+/* --- HERO --- */
+.hero { text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 80vh; padding: 40px 0; width: 100%;}
+.status-badge {
+    display: inline-flex; align-items: center; gap: 10px;
+    background: rgba(225, 29, 72, 0.1); border: 1px solid rgba(225, 29, 72, 0.3);
+    color: #fda4af; font-size: 0.75rem; font-weight: 800;
+    padding: 8px 20px; border-radius: 100px; margin-bottom: 20px;
+    font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 1px;
+}
+.status-badge .dot { width: 8px; height: 8px; background: var(--touhou-sakura); border-radius: 50%; animation: pulse-glow 2s infinite; }
+
+.hero h1 { font-size: clamp(2.5rem, 8vw, 6rem); margin-bottom: 20px; line-height: 1.1; letter-spacing: -2px; text-transform: uppercase; font-style: italic;}
+.hero h1 span { 
+    color: var(--touhou-red); 
+    display: inline-block; 
+    animation: touhou-magic 4s ease-in-out infinite; 
+}
+.hero p { color: var(--text-dim); font-size: clamp(0.9rem, 3vw, 1.2rem); max-width: 800px; margin: 0 auto 30px auto; line-height: 1.6; text-align: center; padding: 0 10px;}
+
+/* --- BUTTONS --- */
+.btn-primary {
+    background: linear-gradient(135deg, var(--touhou-red), var(--touhou-crimson));
+    color: #fff; border: 1px solid rgba(225, 29, 72, 0.5);
+    padding: 16px 32px; border-radius: 16px;
+    font-weight: 800; font-size: 1rem; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; gap: 12px;
+    transition: var(--trans); text-decoration: none; text-transform: uppercase; letter-spacing: 1px;
+    box-shadow: 0 10px 30px rgba(225, 29, 72, 0.2); width: 100%; max-width: 320px;
+}
+.btn-primary:hover { transform: translateY(-3px); box-shadow: 0 15px 40px rgba(225, 29, 72, 0.5); filter: brightness(1.1); }
+
+.btn-secondary {
+    background: rgba(0,0,0,0.3); border: 1px solid var(--border);
+    color: var(--text-main); padding: 14px 24px; border-radius: 12px;
+    font-weight: 700; font-size: 0.9rem; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+    text-decoration: none; transition: var(--trans); width: 100%;
+}
+@media (min-width: 480px) { .btn-secondary { width: auto; } }
+.btn-secondary:hover { background: var(--bg-hover); border-color: var(--touhou-red); color: #fff; }
+
+/* --- DASHBOARD GRID --- */
+.grid-layout { 
+    display: grid; 
+    grid-template-columns: 1fr; 
+    gap: 20px; 
+    align-items: start; 
+    width: 100%;
+}
+@media (min-width: 950px) { 
+    .grid-layout { grid-template-columns: 360px 1fr; gap: 24px; } 
+}
+
+.dashboard { display: flex; flex-direction: column; gap: 16px; width: 100%; }
+@media (min-width: 950px) { .dashboard { position: sticky; top: 40px; } }
+
+.stat-panel { background: rgba(0,0,0,0.4); border: 1px solid var(--border); border-radius: 16px; padding: 20px; width: 100%; }
+.stat-title { font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 2px; font-weight: 800; display: flex; align-items: center; gap: 10px; margin-bottom: 8px;}
+.stat-value { font-size: clamp(1.8rem, 5vw, 2.5rem); font-weight: 800; font-family: 'JetBrains Mono', monospace; line-height: 1; color: var(--touhou-sakura);}
+.stat-value span { font-size: 0.8rem; color: var(--text-dark); margin-left: 6px; font-family: 'Manrope', sans-serif; text-transform: uppercase;}
+
+.sys-log {
+    background: #050203; border: 1px solid var(--border); border-radius: 16px; padding: 16px;
+    font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: var(--text-dim);
+    display: flex; flex-direction: column; gap: 10px; width: 100%; overflow-x: hidden;
+    word-break: break-all;
+}
+.sys-log .line span { color: var(--text-main); }
+.sys-log .line .magic { color: var(--touhou-red); text-shadow: 0 0 10px rgba(225, 29, 72, 0.4); }
+
+/* --- TABS & APPS --- */
+.tabs { 
+    display: flex; background: rgba(0,0,0,0.4); padding: 6px; 
+    border-radius: 14px; border: 1px solid var(--border); margin-bottom: 24px; 
+    overflow-x: auto; scrollbar-width: none; width: 100%;
+}
+.tabs::-webkit-scrollbar { display: none; }
+.tab-btn {
+    flex: 1 0 auto;
+    min-width: 90px; background: transparent; border: none; color: var(--text-dim);
+    padding: 12px 10px; border-radius: 10px; font-weight: 800; font-size: 0.8rem; text-transform: uppercase;
+    cursor: pointer; transition: var(--trans); display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.tab-btn.active { background: rgba(225, 29, 72, 0.15); color: #fff; border: 1px solid var(--border-light); }
+
+.app-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 10px; margin-bottom: 20px; width: 100%; }
+.app-card {
+    background: rgba(0,0,0,0.3); border: 1px solid var(--border);
+    border-radius: 14px; padding: 16px 8px; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; gap: 10px; transition: var(--trans); text-align: center;
+}
+.app-card:hover { background: rgba(225, 29, 72, 0.05); transform: translateY(-3px); border-color: rgba(225, 29, 72, 0.3); }
+.app-card.selected { border-color: var(--touhou-red); background: rgba(225, 29, 72, 0.15); box-shadow: 0 5px 15px rgba(225, 29, 72, 0.1); }
+.app-card.selected .app-icon { color: var(--touhou-sakura); transform: scale(1.15); }
+.app-icon { font-size: 1.8rem; color: var(--text-dim); transition: var(--trans); }
+.app-name { font-weight: 800; font-size: 0.75rem; letter-spacing: 0.5px; text-transform: uppercase; }
+
+/* --- TEXT BLOCKS & TYPOGRAPHY --- */
+.content-section h2 { font-size: clamp(1.3rem, 4vw, 2rem); color: #fff; margin-bottom: 20px; display: flex; align-items: center; gap: 12px; font-style: italic; text-transform: uppercase; letter-spacing: -1px;}
+.content-section h2 i { color: var(--touhou-red); font-size: clamp(1.2rem, 4vw, 1.5rem); }
+
+.text-block { font-size: 0.95rem; color: var(--text-dim); line-height: 1.6; }
+@media (min-width: 768px) { .text-block { font-size: 1.05rem; line-height: 1.7; } }
+
+.text-block p { margin-bottom: 16px; }
+.text-block p:last-child { margin-bottom: 0; }
+.text-block b, .text-block strong { color: #fff; }
+.text-block i { color: var(--touhou-sakura); }
+.text-block ul, .text-block ol { padding-left: 20px; margin-bottom: 16px; display: flex; flex-direction: column; gap: 10px; }
+.text-block li::marker { color: var(--touhou-red); font-weight: 900; }
+.text-block blockquote { 
+    border-left: 4px solid var(--touhou-red); padding-left: 16px; font-style: italic; 
+    background: rgba(225, 29, 72, 0.05); border-radius: 0 12px 12px 0; padding: 16px; 
+    margin-bottom: 16px; color: var(--text-main); font-size: 0.9rem;
+}
+
+/* --- CYBER TABLE --- */
+.table-responsive {
+    width: 100%; overflow-x: auto; margin-bottom: 20px; border-radius: 16px;
+    border: 1px solid var(--border); background: rgba(0,0,0,0.2);
+}
+.cyber-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; min-width: 600px; }
+.cyber-table th, .cyber-table td { padding: 16px; text-align: left; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); line-height: 1.6; vertical-align: top;}
+.cyber-table th:last-child, .cyber-table td:last-child { border-right: none; }
+.cyber-table tr:last-child td { border-bottom: none; }
+.cyber-table th { background: rgba(225, 29, 72, 0.1); color: #fff; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; }
+
+/* --- INSTRUCTIONS LIST --- */
+.instruction-box { background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 16px; padding: clamp(16px, 4vw, 24px); width: 100%; overflow-x: hidden;}
+.step-list { display: flex; flex-direction: column; gap: 16px; counter-reset: steps; margin-top: 16px; }
+.step-item { position: relative; padding-left: 40px; font-size: 0.95rem; color: var(--text-main); line-height: 1.5; word-break: break-word;}
+.step-item::before {
+    counter-increment: steps; content: counter(steps);
+    position: absolute; left: 0; top: -2px; width: 28px; height: 28px;
+    background: rgba(225, 29, 72, 0.1); border: 1px solid var(--touhou-red); border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.8rem; font-weight: 900; color: var(--touhou-sakura); font-family: 'JetBrains Mono', monospace;
+}
+.step-item code { background: rgba(255,255,255,0.05); padding: 4px 8px; border-radius: 6px; font-size: 0.8rem; color: var(--cyber-blue); border: 1px solid var(--border); font-family: 'JetBrains Mono', monospace;}
+
+/* --- SUB CARDS --- */
+.sub-grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+.sub-card {
+    background: rgba(0,0,0,0.4); border: 1px solid var(--border); border-radius: 16px; padding: 20px;
+    cursor: pointer; transition: var(--trans); display: flex; flex-direction: column; gap: 10px; position: relative; overflow: hidden;
+}
+.sub-card::before { content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: transparent; transition: 0.4s; }
+.sub-card:hover { transform: translateX(5px); background: rgba(255,255,255,0.02); }
+
+.sub-card.reality { border-color: rgba(139, 92, 246, 0.3); }
+.sub-card.reality::before { background: var(--touhou-purple); }
+.sub-card.reality:hover { border-color: var(--touhou-purple); box-shadow: 0 0 30px rgba(139, 92, 246, 0.15); }
+
+.sub-card.fast { border-color: rgba(16, 185, 129, 0.3); }
+.sub-card.fast::before { background: var(--cyber-green); }
+.sub-card.fast:hover { border-color: var(--cyber-green); box-shadow: 0 0 30px rgba(16, 185, 129, 0.15); }
+
+.sub-card.mix { border-color: rgba(225, 29, 72, 0.3); }
+.sub-card.mix::before { background: var(--touhou-red); }
+.sub-card.mix:hover { border-color: var(--touhou-red); box-shadow: 0 0 30px rgba(225, 29, 72, 0.15); }
+
+.sub-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+.sub-title { font-weight: 800; font-size: 1.1rem; color: #fff; display: flex; align-items: center; gap: 8px; }
+.sub-badge { font-size: 0.6rem; padding: 4px 8px; border-radius: 6px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; white-space: nowrap; }
+.badge-reality { background: rgba(139, 92, 246, 0.15); color: #c4b5fd; border: 1px solid rgba(139, 92, 246, 0.3); }
+.badge-fast { background: rgba(16, 185, 129, 0.15); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, 0.3); }
+.badge-mix { background: rgba(225, 29, 72, 0.15); color: #fda4af; border: 1px solid rgba(225, 29, 72, 0.3); }
+.sub-desc { font-size: 0.85rem; color: var(--text-dim); line-height: 1.4; }
+.sub-tech { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: var(--text-dark); margin-top: 4px; font-weight: 700;}
+
+/* --- MODALS --- */
+.modal-overlay {
+    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+    background: rgba(0, 0, 0, 0.9); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
+    display: flex; justify-content: center; align-items: center;
+    z-index: 1000; opacity: 0; pointer-events: none; transition: var(--trans); padding: 15px;
+}
+.modal-overlay.active { opacity: 1; pointer-events: all; }
+.modal {
+    background: #0f0508; border: 1px solid var(--border-light); border-radius: 20px; 
+    width: 100%; max-width: 500px;
+    transform: translateY(30px) scale(0.95); transition: var(--trans);
+    box-shadow: 0 40px 80px rgba(0,0,0,0.8), 0 0 0 1px rgba(225, 29, 72, 0.2) inset; 
+    display: flex; flex-direction: column; max-height: 85vh;
+}
+.modal-overlay.active .modal { transform: translateY(0) scale(1); }
+.modal-header { 
+    padding: 20px; border-bottom: 1px solid var(--border); 
+    display: flex; justify-content: space-between; align-items: center; 
+    background: rgba(225, 29, 72, 0.05); border-radius: 20px 20px 0 0;
+}
+.modal-title { font-size: clamp(1rem, 4vw, 1.1rem); font-weight: 800; display: flex; align-items: center; gap: 10px; color: #fff; text-transform: uppercase; letter-spacing: -0.5px;}
+.btn-close { 
+    background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 50%; 
+    width: 36px; height: 36px; color: var(--text-dim); cursor: pointer; transition: 0.3s; 
+    display: flex; justify-content: center; align-items: center; flex-shrink: 0;
+}
+.btn-close:hover { background: var(--touhou-red); color: #fff; border-color: var(--touhou-red); transform: rotate(90deg); }
+.modal-body { padding: 20px; overflow-y: auto; }
+
+.rule-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 24px; }
+.rule-item { 
+    display: flex; align-items: flex-start; gap: 16px;
+    background: rgba(0,0,0,0.3); padding: 16px; border-radius: 16px; border: 1px solid var(--border); 
+}
+.rule-icon { font-size: 1.3rem; margin-top: 2px; }
+.rule-item h4 { color: #fff; font-size: 0.95rem; margin-bottom: 6px; line-height: 1.2; }
+.rule-item p { color: var(--text-dim); font-size: 0.85rem; line-height: 1.4; }
+
+/* --- TOAST --- */
+.toast {
+    position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(100px);
+    background: var(--touhou-red); color: #fff; padding: 12px 24px;
+    border-radius: 100px; font-weight: 800; font-size: 0.9rem; border: 1px solid rgba(255,255,255,0.2);
+    box-shadow: 0 10px 30px rgba(225, 29, 72, 0.4); transition: all 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    z-index: 2000; opacity: 0; display: flex; align-items: center; gap: 10px; white-space: nowrap;
+}
+.toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+/* --- STRICT LEGAL DISCLAIMER --- */
+.legal-wrapper { margin-top: 20px; padding: 0; width: 100%;}
+@media (min-width: 768px) { .legal-wrapper { margin-top: 40px; } }
+
+.disclaimer-block {
+    background: #050203;
+    border: 1px solid #222;
+    padding: clamp(16px, 4vw, 24px);
+    border-radius: 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    color: #666;
+    line-height: 1.6;
+    text-align: left;
+    box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
+    width: 100%;
+}
+@media (min-width: 768px) { .disclaimer-block { font-size: 0.75rem; } }
+
+.disclaimer-block h4 {
+    color: #888;
+    font-size: clamp(0.9rem, 4vw, 1rem);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 16px;
+    text-align: center;
+    font-weight: 800;
+    border-bottom: 1px solid #222;
+    padding-bottom: 10px;
+}
+.disclaimer-block p { margin-bottom: 12px; }
+.disclaimer-block p:last-child { margin-bottom: 0; }
+.disclaimer-block b { color: #999; font-weight: 700; }
+
+.footer { text-align: center; color: var(--text-dark); font-size: 0.8rem; padding: 30px 0 20px 0; font-weight: 700; width: 100%; }
+.footer a { color: var(--text-dim); text-decoration: none; transition: 0.3s; border-bottom: 1px solid var(--border); padding-bottom: 2px;}
+.footer a:hover { color: var(--touhou-sakura); border-color: var(--touhou-sakura); }
+
+    </style>
+</head>
+<body>
+
+    <!-- SCARLET MIST LAYER (Easter Egg) -->
+    <div id="mist-layer" class="scarlet-mist-layer"></div>
+
+    <!-- БОКОВАЯ НАВИГАЦИЯ -->
+    <nav class="side-nav">
+        <button class="nav-btn active" data-target="home">
+            <span class="nav-label">Nexus</span>
+            <div class="nav-dot"></div>
+        </button>
+        <button class="nav-btn" data-target="about">
+            <span class="nav-label">О проекте</span>
+            <div class="nav-dot"></div>
+        </button>
+        <button class="nav-btn" data-target="guide">
+            <span class="nav-label">Гайд</span>
+            <div class="nav-dot"></div>
+        </button>
+        <button class="nav-btn" data-target="theory_bs">
+            <span class="nav-label">БС vs ЧС</span>
+            <div class="nav-dot"></div>
+        </button>
+        <button class="nav-btn" data-target="theory_isp">
+            <span class="nav-label">Приватность</span>
+            <div class="nav-dot"></div>
+        </button>
+        <button class="nav-btn" data-target="contacts">
+            <span class="nav-label">Контакты</span>
+            <div class="nav-dot"></div>
+        </button>
+    </nav>
+
+    <!-- ИНТЕРАКТИВНАЯ ПАНЕЛЬ ЭФФЕКТОВ -->
+    <div class="fun-panel reveal">
+        <button id="btn-mist" class="fun-btn" title="Алый туман"><i class="fa-solid fa-cloud"></i></button>
+        <button id="btn-danmaku" class="fun-btn" title="Даммаку"><i class="fa-solid fa-meteor"></i></button>
+        <button id="btn-bats" class="fun-btn" title="Духи особняка"><i class="fa-solid fa-ghost"></i></button>
+    </div>
+
+    <div class="container">
+        
+        <!-- HERO & DASHBOARD SECTION -->
+        <section id="home">
+            <div class="hero reveal active">
+                <div class="status-badge"><div class="dot"></div> Scarlet Mist Barrier: Active</div>
+                <h1>Scarlet Devil <span>Network</span></h1>
+                <p>
+                    Элитная система обхода сетевых барьеров (Scarlet Devil Protocol). 
+                    Мы собираем, тестируем и верифицируем лучшие конфигурации связи, 
+                    чтобы ваш доступ в интернет оставался бесперебойным.
+                </p>
+                <button class="btn-primary" onclick="openModal('rules-modal')">
+                    <i class="fa-solid fa-key"></i> Получить доступ
+                </button>
+            </div>
+
+            <div class="grid-layout reveal">
+                <div class="dashboard">
+                    <div class="stat-panel">
+                        <div class="stat-title"><i class="fa-solid fa-gauge-high"></i> Max Speed</div>
+                        <div class="stat-value text-touhou">60<span>Mbps</span></div>
+                    </div>
+                    <div class="stat-panel">
+                        <div class="stat-title"><i class="fa-solid fa-server"></i> Active Nodes</div>
+                        <div class="stat-value">95<span>UP</span></div>
+                    </div>
+                    
+                    <div class="sys-log">
+                        <div class="line">> last_sync: <span>04.03 23:29 MSK</span></div>
+                        <div class="line">> protocols: <span>VLESS, VMESS, TROJAN, SS, HY2</span></div>
+                        <div class="line">> obfuscation: <span class="magic">REALITY_ACTIVE</span></div>
+                    </div>
+                </div>
+
+                <div class="glass-card">
+                    <h2 style="margin-bottom: 20px; font-size: 1.3rem;">Руководство по настройке</h2>
+                    <p style="color: var(--text-dim); font-size: 0.9rem; margin-bottom: 24px;">Выберите вашу платформу, установите рекомендованный клиент и следуйте инструкциям для активации подписки.</p>
+                    
+                    <div class="tabs">
+                        <button class="tab-btn" id="tab-windows" onclick="switchPlatform('windows')"><i class="fa-brands fa-windows"></i> Windows</button>
+                        <button class="tab-btn" id="tab-android" onclick="switchPlatform('android')"><i class="fa-brands fa-android"></i> Android</button>
+                        <button class="tab-btn" id="tab-androidtv" onclick="switchPlatform('androidtv')"><i class="fa-solid fa-tv"></i> TV</button>
+                        <button class="tab-btn" id="tab-ios" onclick="switchPlatform('ios')"><i class="fa-brands fa-apple"></i> iOS</button>
+                        <button class="tab-btn" id="tab-mac" onclick="switchPlatform('mac')"><i class="fa-solid fa-laptop"></i> Mac</button>
+                        <button class="tab-btn" id="tab-linux" onclick="switchPlatform('linux')"><i class="fa-brands fa-linux"></i> Linux</button>
+                    </div>
+
+                    <div class="instruction-box">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                            <h3 style="font-size: 1rem;">1. Выбор клиента</h3>
+                        </div>
+                        <div class="app-grid" id="app-grid"></div>
+                        <a href="#" target="_blank" id="download-btn" class="btn-secondary" style="width: 100%; border-color: var(--border-light);">
+                            <span><i class="fa-solid fa-download" style="margin-right: 8px; color: var(--touhou-sakura)"></i> Скачать <b id="app-name-display">App</b></span> 
+                        </a>
+
+                        <h3 style="font-size: 1rem; margin-top: 30px;">2. Импорт и запуск</h3>
+                        <div id="instruction-text"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- О ПРОЕКТЕ -->
+        <section id="about" class="content-section reveal">
+            <div class="glass-card">
+                <h2><i class="fa-solid fa-circle-info"></i> Описание проекта</h2>
+                <div class="text-block">
+                    <p><b>Scarlet Devil Network</b> — это независимая технологическая инициатива, созданная для обеспечения стабильного доступа к информации в условиях жесткой сетевой цензуры и работы систем глубокой фильтрации трафика (DPI/ТСПУ).</p>
+                    <p>Проект представляет собой автоматизированный агрегатор и верификатор публичных VPN-конфигураций. Мы не просто собираем ссылки, мы подвергаем их многоступенчатой проверке. Каждые несколько часов наш матричный движок сканирует десятки тысяч узлов (<code>VLESS</code>, <code>VMess</code>, <code>Trojan</code>, <code>Shadowsocks</code>, <code>Hysteria2</code>), отсеивая до 98% мусора, нерабочих серверов и "пустышек".</p>
+                    <p><b>Почему это важно сегодня?</b><br>
+                    Классические протоколы (OpenVPN, WireGuard, L2TP) практически полностью блокируются по паттернам трафика. Платные и бесплатные сервисы на их базе становятся бесполезны. Наша коллекция фокусируется на современных методах обфускации (маскировки), таких как <code>VLESS Reality</code> и <code>XHTTP</code>, которые мимикрируют под обычный HTTPS-трафик, делая ваше соединение невидимым для провайдера.</p>
+                    <p>Весь процесс полностью прозрачен: скрипт проводит реальные тесты на доступность из разных точек, замеряет задержку и проверяет пропускную способность (загрузка 50MB чанков). В итоговые подписки попадают только те узлы, которые гарантированно "пробивают" барьеры и обеспечивают комфортную скорость.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- КАК ПОЛЬЗОВАТЬСЯ -->
+        <section id="guide" class="content-section reveal">
+            <div class="glass-card">
+                <h2><i class="fa-solid fa-terminal"></i> Инструкция по эксплуатации</h2>
+                <div class="text-block">
+                    <p><b>Шаг 1: Получение ссылки</b><br>
+                    Нажмите кнопку <b>«Получить доступ»</b> в верхней части сайта. Выберите нужный тип подписки (БС — для обхода жестких блокировок, ЧС — для максимальной скорости в обычном режиме) и скопируйте ссылку. 
+                    <br><i>Внимание: в клиент нужно вставлять именно URL-ссылку, а не копировать текст из файла.</i></p>
+
+                    <p><b>Шаг 2: Настройка автоматизации</b><br>
+                    После добавления подписки в ваш клиент (v2rayNG, Throne, Nekobox и др.), перейдите в её настройки и <b>включите автообновление</b>. Публичные серверы крайне нестабильны и могут "жить" от нескольких часов до пары дней. Рекомендуемый интервал обновления — каждые 4-6 часов. Это гарантирует, что в вашем списке всегда будут только актуальные IP-адреса.</p>
+
+                    <p><b>Шаг 3: Конфигурация безопасности</b><br>
+                    В настройках большинства клиентов рекомендуется включить опцию <b>«Разрешить небезопасные / Allow Insecure»</b>. Многие рабочие серверы используют самоподписанные SSL-сертификаты. Без этой галочки клиент будет обрывать соединение в целях безопасности, и вы потеряете значительную часть доступных мощностей.</p>
+
+                    <p><b>Шаг 4: Выбор оптимального узла</b><br>
+                    Главный инструмент пользователя — <b>Тест реальной задержки</b> (Latency Test / URL Test). 
+                    <blockquote>Не используйте обычный TCP или ICMP пинг — они показывают лишь отклик оборудования, но не работоспособность прокси-туннеля. Только тест задержки через HTTP-запрос (204/Google тест) покажет, проходит ли трафик через барьеры провайдера.</blockquote>
+                    Отсортируйте список по результатам теста и выбирайте серверы с минимальным значением (зеленые цифры). Если один узел перестал работать — просто выберите следующий по списку.</p>
+                    
+                    <p><i>Важное замечание: на многих российских серверах из списка также доступны заблокированные ресурсы. Если ваша цель — только обход ограничений (например, YouTube), не обязательно подключаться к зарубежным узлам с высоким пингом.</i></p>
+                </div>
+            </div>
+        </section>
+
+        <!-- БС vs ЧС -->
+        <section id="theory_bs" class="content-section reveal">
+            <div class="glass-card">
+                <h2><i class="fa-solid fa-yin-yang" style="color: var(--touhou-red);"></i> Граница Фантазии: БС vs ЧС</h2>
+                <div class="text-block">
+                    <p>Перед активацией выбранной подписки необходимо провести калибровку вашего канала. Откройте <i>Яндекс</i>, <i>ВК</i> или <i>Госуслуги</i>. Если эти порталы не отвечают — барьер между сетями закрыт полностью, у вас нет физического соединения, и никакой протокол здесь не поможет.</p>
+                    <p>Если же локальные ресурсы доступны, определите тип действующего на вас барьера и выберите соответствующий маршрут:</p>
+                    
+                    <div class="table-responsive">
+                        <table class="cyber-table">
+                            <tr>
+                                <th style="color: var(--touhou-sakura); border-bottom: 2px solid var(--touhou-sakura);">ЧЕРНЫЕ СПИСКИ (ЧС)</th>
+                                <th style="color: var(--touhou-purple); border-bottom: 2px solid var(--touhou-purple);">БЕЛЫЕ СПИСКИ (БС)</th>
+                            </tr>
+                            <tr>
+                                <td><b>Философия:</b> «Разрешено всё, что не запрещено». Вы находитесь в стандартной реальности.</td>
+                                <td><b>Философия:</b> «Запрещено всё, что не разрешено». Жесткий барьер фильтрации.</td>
+                            </tr>
+                            <tr>
+                                <td><b>Состояние сети:</b> Кабельный интернет или мобильный без жестких "блэкаутов". Google, Telegram и App Store открываются без помощи извне.</td>
+                                <td><b>Состояние сети:</b> Тотальная изоляция на мобильных сетях. Доступны только утвержденные регулятором сайты (белый список).</td>
+                            </tr>
+                            <tr>
+                                <td><b>Целевые данные:</b> Максимальная скорость для тяжелого <i>Danmaku</i>-трафика: YouTube 4K, стриминг, Discord.</td>
+                                <td><b>Целевые данные:</b> Скрытое проникновение через "Gaps". Задача — доставить сообщение или прочитать почту.</td>
+                            </tr>
+                            <tr>
+                                <td><b>Рекомендуемые подписки:</b> <code>Hysteria2</code>, <code>Shadowsocks</code>, <code>VLESS</code>. Главный приоритет — чистая мощность.</td>
+                                <td><b>Рекомендуемые подписки:</b> Только <code>VLESS Reality</code>. Трафик полностью маскируется под легальные сервисы.</td>
+                            </tr>
+                        </table>
+                    </div>
+                    
+                    <blockquote>
+                        <i class="fa-solid fa-wand-magic-spark"></i> <b>Совет мудреца:</b> Не тратьте ресурсы Reality-узлов из «Обхода БС» для повседневного просмотра видео, если на вас не наложены жесткие ограничения. Берегите эти маршруты для тех, кто находится в зоне полной изоляции.
+                    </blockquote>
+                </div>
+            </div>
+        </section>
+
+        <!-- ПРОВАЙДЕРЫ И DOH -->
+        <section id="theory_isp" class="content-section reveal">
+            <div class="glass-card">
+                <h2><i class="fa-solid fa-eye-slash" style="color: var(--touhou-purple);"></i> Иллюзия наблюдения: что видит провайдер?</h2>
+                <div class="text-block">
+                    <p>Существует миф, что интернет-провайдер — это "всевидящее око", которое читает вашу переписку и видит каждое движение. В реальности, благодаря повсеместному шифрованию <b>HTTPS</b> (TLS), ваше соединение надежно защищено.</p>
+                    
+                    <p><b>Что провайдер видит на самом деле:</b></p>
+                    <ul>
+                        <li><b>Конечный IP-адрес:</b> Он знает, к какому серверу вы обращаетесь.</li>
+                        <li><b>Название домена (через SNI):</b> При установке связи название сайта (например, <code>google.com</code>) передается открытым текстом. Это позволяет провайдерам блокировать ресурсы по спискам.</li>
+                        <li><b>Объем и время трафика:</b> Он видит "вес" передаваемых данных, но не их содержимое.</li>
+                    </ul>
+
+                    <p><b>Чего он НЕ видит КАТЕГОРИЧЕСКИ:</b> Конкретные страницы, которые вы открываете внутри сайта, ваши поисковые запросы, сообщения в чатах или видео, которые вы смотрите. Для него всё это — зашифрованный черный ящик.</p>
+
+                    <p style="margin-top: 25px;"><b><i class="fa-solid fa-scroll"></i> Гримуар DNS-over-HTTPS (DoH)</b></p>
+                    <p>Обычный DNS — это как открытая записка: "Я хочу пойти на сайт X". Провайдер перехватывает её и блокирует доступ. <b>DoH</b> прячет этот запрос внутрь стандартного HTTPS, делая ваш выбор домена невидимым для локального цензора.</p>
+                    
+                    <p><b>Проверенные серверы DoH для настройки в браузере или системе:</b></p>
+                    <ul>
+                        <li><code>https://dns.quad9.net/dns-query</code> — <b>Quad9:</b> Максимальная приватность (Швейцария) + автоматическая фильтрация вредоносных узлов.</li>
+                        <li><code>https://dns.adguard-dns.com/dns-query</code> — <b>AdGuard:</b> Защитник, который на лету вырезает рекламные трекеры и шпионские скрипты.</li>
+                        <li><code>https://dns.cloudflare.com/dns-query</code> — <b>Cloudflare:</b> Самый быстрый и стабильный вариант, база для большинства современных сетей.</li>
+                    </ul>
+
+                    <p style="margin-top: 25px;"><b><i class="fa-solid fa-user-ninja"></i> Приватные браузеры: уход от телеметрии</b></p>
+                    <p>Даже если ваш канал зашифрован, сам браузер может передавать телеметрию создателям. Для максимальной безопасности используйте инструменты с открытым исходным кодом (Open-Source):</p>
+                    <ol>
+                        <li><b>Librewolf</b> — Мощно кастомизированный Firefox. Из него вырезаны все модули слежки, а блокировщик <i>uBlock Origin</i> встроен прямо в ядро.</li>
+                        <li><b>Ungoogled Chromium</b> — Тот же привычный Chrome, но из которого хирургическим путем удалили все связи с Google и модули сбора данных.</li>
+                        <li><b>Cromite</b> — Обязательный артефакт для Android. Позволяет не только блокировать рекламу, но и скрывать "цифровой отпечаток" вашего устройства.</li>
+                    </ol>
+                    
+                    <blockquote>
+                        <i class="fa-solid fa-circle-exclamation"></i> <b>Важно:</b> Никогда не используйте браузеры от крупных корпораций с сомнительной репутацией. Они являются прямым инструментом сбора данных и анализа вашего трафика.
+                    </blockquote>
+                </div>
+            </div>
+        </section>
+
+        <!-- CONTACTS -->
+        <section id="contacts" class="content-section reveal">
+            <div class="glass-card">
+                <h2><i class="fa-brands fa-telegram" style="color: var(--cyber-blue);"></i> Сообщество и Контакты</h2>
+                <div class="text-block text-center py-4">
+                    <p>Присоединяйтесь к нашему Telegram-форуму для обсуждения работы ядра, получения помощи по настройке клиентов и общения с другими участниками сети.</p>
+                    <a href="https://t.me/ScDevNetwork" target="_blank" class="btn-primary" style="margin-top: 15px;">
+                        <i class="fa-solid fa-paper-plane"></i> Перейти в Telegram
+                    </a>
+                </div>
+            </div>
+        </section>
+
+        <!-- STRICT LEGAL DISCLAIMER -->
+        <div class="legal-wrapper reveal">
+            <div class="disclaimer-block">
+                <h4>Юридическое уведомление и отказ от ответственности</h4>
+                <p>1. <b>Статус ресурса:</b> Данный сайт представляет собой автоматизированный программный парсер (агрегатор метаданных). Владелец ресурса не является владельцем, оператором или провайдером VPN-серверов, конфигурации которых здесь публикуются. Вся информация собирается скриптом в автоматическом режиме из открытых, общедоступных источников.</p>
+                <p>2. <b>Цель проекта:</b> Весь материал, включая текстовые инструкции и технические данные, предоставляется исключительно в ознакомительных, исследовательских и образовательных целях. Проект не является коммерческим сервисом и не занимается рекламой VPN-провайдеров.</p>
+                <p>3. <b>Отказ от ответственности:</b> Автор проекта не несет никакой юридической или финансовой ответственности за последствия использования предоставленной информации. Использование представленных конфигураций осуществляется пользователем добровольно, на свой страх и риск.</p>
+                <p>4. <b>Допустимое использование:</b> Мы настоятельно рекомендуем применять данные технологии исключительно для легитимных целей: защиты персональных данных при подключении к открытым сетям Wi-Fi, обеспечения информационной безопасности устройств и корпоративного удаленного доступа.</p>
+                <br>
+                <p><b>ВНИМАНИЕ:</b> Находясь на данном сайте и используя его материалы, вы автоматически подтверждаете свое согласие с данными условиями. Если вы не согласны с изложенными правилами, вам следует немедленно покинуть данный ресурс.</p>
+            </div>
+        </div>
+
+        <div class="footer reveal">
+            Created by <a href="https://t.me/ScarletDevilTeam" target="_blank">Scarlet Devil Team</a> • 2026<br>
+            <span style="font-size: 0.7rem; color: var(--border-light); margin-top: 5px; display: inline-block;">Powered by Scarlet Devil Mansion Architecture</span>
+        </div>
+    </div>
+
+    <!-- MODALS (RULES & CONFIGS) -->
+    <div class="modal-overlay" id="rules-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title"><i class="fa-solid fa-shield-halved" style="color: var(--touhou-sakura);"></i> Условия использования</div>
+                <button class="btn-close" onclick="closeModal('rules-modal')"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <p style="color: var(--text-dim); font-size: 0.9rem; margin-bottom: 20px;">Ознакомьтесь с правилами сети. Нарушение приводит к бану серверов на магистралях (ТСПУ).</p>
+                
+                <div class="rule-list">
+                    <div class="rule-item">
+                        <i class="fa-solid fa-ban rule-icon" style="color: var(--touhou-red);"></i>
+                        <div>
+                            <h4>Строго без торрентов (P2P)</h4>
+                            <p>Скачивание торрентов через прокси моментально палит сервер и приводит к его бану у хостера. Уважайте труд сообщества.</p>
+                        </div>
+                    </div>
+                    <div class="rule-item">
+                        <i class="fa-solid fa-building-columns rule-icon" style="color: var(--cyber-blue);"></i>
+                        <div>
+                            <h4>Банки и Гос. сервисы</h4>
+                            <p>Отключайте VPN при входе в банки. Алгоритмы безопасности могут временно заблокировать ваш аккаунт за вход с иностранного IP.</p>
+                        </div>
+                    </div>
+                    <div class="rule-item">
+                        <i class="fa-solid fa-rotate rule-icon" style="color: var(--cyber-green);"></i>
+                        <div>
+                            <h4>Автообновление</h4>
+                            <p>Конфиги обновляются регулярно. Обязательно настройте в вашем клиенте автоматическое обновление подписки раз в 4-6 часов.</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <button class="btn-primary" style="width: 100%; max-width: 100%;" onclick="acceptRules()">
+                    <i class="fa-solid fa-check"></i> Активировать доступ
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="configs-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title"><i class="fa-solid fa-network-wired" style="color: var(--accent);"></i> Выбор маршрута</div>
+                <button class="btn-close" onclick="closeModal('configs-modal')"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <p style="color: var(--text-dim); font-size: 0.85rem; margin-bottom: 20px;">
+                    Трафик отсортирован и прошел валидацию. Выберите нужную подписку:
+                </p>
+
+                <div class="sub-grid">
+                    <div class="sub-card reality" onclick="copySub('/sub1', 'Nightbird (БС)')">
+                        <div class="sub-header">
+                            <div class="sub-title"><i class="fa-solid fa-mask" style="color: #c4b5fd;"></i> Обход БС</div>
+                            <div class="sub-badge badge-reality">Nightbird</div>
+                        </div>
+                        <div class="sub-desc">Для мобильных сетей с жесткими ограничениями. Трафик мимикрирует под легальные сайты.</div>
+                        <div class="sub-tech">PROTO: VLESS REALITY</div>
+                    </div>
+
+                    <div class="sub-card fast" onclick="copySub('/sub2', 'Vampire Dash (ЧС)')">
+                        <div class="sub-header">
+                            <div class="sub-title"><i class="fa-solid fa-jet-fighter" style="color: #6ee7b7;"></i> Обход ЧС</div>
+                            <div class="sub-badge badge-fast">Vampire Dash</div>
+                        </div>
+                        <div class="sub-desc">Для стандартного интернета. Максимальная скорость для стриминга и тяжелого трафика.</div>
+                        <div class="sub-tech">PROTO: HYSTERIA2, SS, VMESS</div>
+                    </div>
+
+                    <div class="sub-card mix" onclick="copySub('/sub', 'Gungnir (MIX)')">
+                        <div class="sub-header">
+                            <div class="sub-title"><i class="fa-solid fa-infinity" style="color: #fda4af;"></i> MIX База</div>
+                            <div class="sub-badge badge-mix">Gungnir</div>
+                        </div>
+                        <div class="sub-desc">Полный гримуар всех живых узлов. Идеально для ПК клиентов с автоматическим URL-тестом.</div>
+                        <div class="sub-tech">PROTO: ALL PROTOCOLS</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast"><i class="fa-solid fa-circle-check"></i> <span id="toast-text">Скопировано!</span></div>
+
+    <script>
+        const BASE_URL = window.location.origin;
+
+const APP_DATABASE = {
+    "throne": {
+        name: "Throne", icon: "fa-solid fa-chess-rook", url: "https://github.com/throneproj/Throne/releases/latest",
+        guide: `
+            <div class="step-list">
+                <div class="step-item">Нажмите <b>«Получить доступ»</b> выше и скопируйте ссылку на подписку.</div>
+                <div class="step-item">В клиенте нажмите на <b>«Профили»</b> -> <b>«Добавить профиль из буфера обмена»</b>.</div>
+                <div class="step-item">Выделите все профили (Ctrl+A), нажмите <b>«Профили»</b> -> <b>«Тест задержки (пинга)»</b>.</div>
+                <div class="step-item">Дождитесь надписи <i>«Тест задержек завершён!»</i> в логах снизу.</div>
+                <div class="step-item">Кликните по колонке <b>«Задержка (пинг)»</b> для сортировки от меньшего к большему.</div>
+                <div class="step-item">Сверху установите галочку <b>«Режим TUN»</b> (важно для обхода DPI).</div>
+                <div class="step-item">Выберите сервер с лучшим пингом -> Правая кнопка мыши -> <b>«Запустить»</b>.</div>
+            </div>
+        `
+    },
+    "nekobox": {
+        name: "NekoBox", icon: "fa-solid fa-cat", url: "https://github.com/MatsuriDayo/nekoray/releases/latest",
+        guide: `
+            <div class="step-list">
+                <div class="step-item">Скопируйте ссылку на подписку.</div>
+                <div class="step-item">Перейдите в <b>«Настройки»</b> -> <b>«Группы»</b> -> <b>«Новая группа»</b>.</div>
+                <div class="step-item">Выберите тип <b>«Подписка»</b> и вставьте вашу ссылку. Нажмите Ок.</div>
+                <div class="step-item">Нажмите кнопку <b>«Обновить подписки»</b>.</div>
+                <div class="step-item">Включите галочку <b>«Режим TUN»</b> и запустите выбранный сервер.</div>
+            </div>
+        `
+    },
+    "v2rayn": {
+        name: "v2rayN", icon: "fa-solid fa-v", url: "https://github.com/2dust/v2rayN/releases/latest",
+        guide: `
+            <div class="step-list">
+                <div class="step-item">Скопируйте ссылку на конфиг.</div>
+                <div class="step-item">Перейдите в <b>«Подписки»</b> -> <b>«Настройки подписки»</b> -> <b>«Добавить»</b>.</div>
+                <div class="step-item">Вставьте ссылку в поле <code>Url</code>, сохраните.</div>
+                <div class="step-item">В главном меню нажмите <b>«Обновить подписку»</b>.</div>
+                <div class="step-item">Выделите сервер с хорошим пингом и нажмите <b>Enter</b> для подключения.</div>
+            </div>
+        `
+    },
+    "singbox": {
+        name: "Singbox UI", icon: "fa-solid fa-box", url: "https://github.com/Leadaxe/singbox-launcher/releases/latest",
+        guide: `
+            <div class="step-list">
+                <div class="step-item">Скопируйте ссылку на подписку.</div>
+                <div class="step-item">Запустите Singbox-launcher и перейдите во вкладку профилей.</div>
+                <div class="step-item">Нажмите <b>«Добавить»</b> и вставьте вашу ссылку.</div>
+                <div class="step-item">Сделайте тест задержки и выберите оптимальный маршрут.</div>
+                <div class="step-item">Нажмите главную кнопку старта для активации туннеля.</div>
+            </div>
+        `
+    },
+    "karing": {
+        name: "Karing", icon: "fa-solid fa-paper-plane", url: "https://github.com/KaringX/karing/releases/latest",
+        guide: `
+            <div class="step-list">
+                <div class="step-item">Скопируйте ссылку на подписку.</div>
+                <div class="step-item">Откройте приложение Karing.</div>
+                <div class="step-item">Нажмите на значок <b>«+»</b> и выберите <b>«Импорт из буфера обмена»</b>.</div>
+                <div class="step-item">Запустите тест задержки.</div>
+                <div class="step-item">Выберите лучший сервер и сдвиньте переключатель подключения.</div>
+            </div>
+        `
+    },
+    "v2rayng": {
+        name: "v2rayNG", icon: "fa-brands fa-android", url: "https://github.com/2dust/v2rayNG/releases/latest",
+        guide: `
+            <div class="step-list">
+                <div class="step-item">Скопируйте ссылку на подписку.</div>
+                <div class="step-item">В приложении нажмите на <b>«+»</b> (справа сверху) -> <b>«Импорт из буфера обмена»</b>.</div>
+                <div class="step-item">Нажмите три точки -> <b>«Проверка профилей группы»</b>.</div>
+                <div class="step-item">Снова три точки -> <b>«Сортировка по результатам теста»</b>.</div>
+                <div class="step-item">Выберите сервер с зеленым пингом и нажмите кнопку <b>▶️ (Старт)</b>.</div>
+            </div>
+        `
+    },
+    "v2raytun": {
+        name: "v2RayTun", icon: "fa-solid fa-rocket", url: "https://v2raytun.com/",
+        guide: `
+            <div class="step-list">
+                <div class="step-item">Скопируйте ссылку на подписку.</div>
+                <div class="step-item">Откройте v2RayTun и перейдите в раздел управления серверами.</div>
+                <div class="step-item">Нажмите иконку <b>добавления</b> -> выберите <b>«Импорт из буфера обмена»</b>.</div>
+                <div class="step-item">Обновите подписку, выберите сервер с зеленым пингом и нажмите кнопку старта.</div>
+            </div>
+        `
+    },
+    "v2box": {
+        name: "V2Box", icon: "fa-brands fa-app-store-ios", url: "https://apps.apple.com/ru/app/v2box-v2ray-client/id6446814690",
+        guide: `
+            <div class="step-list">
+                <div class="step-item">Скопируйте ссылку на подписку с нашего сайта.</div>
+                <div class="step-item">Откройте V2Box, перейдите во вкладку <b>«Config»</b>.</div>
+                <div class="step-item">Нажмите на <b>«+»</b> -> <b>«Добавить подписку»</b>.</div>
+                <div class="step-item">Вставьте ссылку в поле <code>URL</code>, введите Имя и сохраните.</div>
+                <div class="step-item">Дождитесь проверки пинга, выберите сервер и нажмите <b>«Подключиться»</b>.</div>
+            </div>
+        `
+    },
+    "shadowrocket": {
+        name: "Shadowrocket", icon: "fa-solid fa-rocket", url: "https://apps.apple.com/us/app/shadowrocket/id932747118",
+        guide: `
+            <div class="step-list">
+                <div class="step-item">Скопируйте ссылку на подписку.</div>
+                <div class="step-item">Откройте Shadowrocket (клиент платный, но стабильный на iOS).</div>
+                <div class="step-item">Нажмите <b>«+»</b> в правом верхнем углу, выберите тип <b>«Subscribe»</b>.</div>
+                <div class="step-item">Вставьте ссылку в поле URL и сохраните.</div>
+                <div class="step-item">Сделайте тест подключения (Connectivity Test), выберите сервер и включите VPN.</div>
+            </div>
+        `
+    },
+    "streisand": {
+        name: "Streisand", icon: "fa-solid fa-shield-cat", url: "https://apps.apple.com/us/app/streisand/id6450534064",
+        guide: `
+            <div class="step-list">
+                <div class="step-item">Скопируйте ссылку на маршрут.</div>
+                <div class="step-item">Откройте Streisand, нажмите на иконку <b>«+»</b> в правом верхнем углу.</div>
+                <div class="step-item">Выберите <b>«Add Subscription»</b>.</div>
+                <div class="step-item">Вставьте ссылку в поле <code>URL</code> и сохраните.</div>
+                <div class="step-item">Зажмите палец на названии подписки и выберите <b>«Latency Test»</b>.</div>
+                <div class="step-item">Выберите лучший узел и нажмите главную кнопку подключения.</div>
+            </div>
+        `
+    },
+    "hiddify": {
+        name: "Hiddify", icon: "fa-solid fa-shield-halved", url: "https://github.com/hiddify/hiddify-app/releases/latest",
+        guide: `
+            <div class="step-list">
+                <div class="step-item">Скопируйте ссылку на подписку.</div>
+                <div class="step-item">Откройте приложение Hiddify и нажмите <b>«Новый профиль»</b>.</div>
+                <div class="step-item">Выберите <b>«Добавить из буфера обмена»</b>.</div>
+                <div class="step-item"><b>Важно:</b> Перейдите в настройки программы и измените "Вариант маршрутизации" на <b>"Индонезия"</b> (или "Россия").</div>
+                <div class="step-item">Нажмите огромную круглую кнопку посередине экрана для запуска.</div>
+            </div>
+        `
+    }
+};
+
+const PLATFORMS = {
+    windows:['throne', 'nekobox', 'v2rayn', 'hiddify', 'karing', 'singbox'],
+    android:['v2rayng', 'nekobox', 'v2raytun', 'hiddify', 'karing'],
+    androidtv:['v2rayng'],
+    ios:['v2box', 'streisand', 'shadowrocket', 'karing', 'v2raytun', 'hiddify'],
+    mac:['hiddify', 'throne', 'karing', 'singbox'],
+    linux:['throne', 'nekobox', 'hiddify', 'karing']
+};
+
+let currentPlatform = 'windows';
+let currentAppId = PLATFORMS['windows'][0];
+
+function init() {
+    const ua = navigator.userAgent.toLowerCase();
+    if (ua.includes("android") && (ua.includes("tv") || window.innerWidth > 1000)) currentPlatform = 'androidtv';
+    else if (ua.includes("android")) currentPlatform = 'android';
+    else if (ua.includes("iphone") || ua.includes("ipad")) currentPlatform = 'ios';
+    else if (ua.includes("macintosh") || ua.includes("mac os")) currentPlatform = 'mac';
+    else if (ua.includes("linux")) currentPlatform = 'linux';
+    else currentPlatform = 'windows';
+    
+    currentAppId = PLATFORMS[currentPlatform][0];
+    updateUI();
+    initScrollSpy();
+    initReveal();
+    initFunPanel();
+}
+
+function switchPlatform(platform) {
+    currentPlatform = platform;
+    currentAppId = PLATFORMS[platform][0];
+    updateUI();
+}
+
+function selectApp(appId) {
+    currentAppId = appId;
+    updateUI();
+}
+
+function updateUI() {
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    const activeTab = document.getElementById(`tab-${currentPlatform}`);
+    if(activeTab) activeTab.classList.add('active');
+
+    const grid = document.getElementById('app-grid');
+    grid.innerHTML = '';
+    
+    PLATFORMS[currentPlatform].forEach(appId => {
+        const appInfo = APP_DATABASE[appId];
+        const div = document.createElement('div');
+        div.className = `app-card ${appId === currentAppId ? 'selected' : ''}`;
+        div.onclick = () => selectApp(appId);
+        div.innerHTML = `<i class="${appInfo.icon} app-icon"></i><div class="app-name">${appInfo.name}</div>`;
+        grid.appendChild(div);
+    });
+
+    const currentApp = APP_DATABASE[currentAppId];
+    const btn = document.getElementById('download-btn');
+    btn.href = currentApp.url;
+    document.getElementById('app-name-display').innerText = currentApp.name;
+    document.getElementById('instruction-text').innerHTML = currentApp.guide;
+}
+
+function initReveal() {
+    const reveals = document.querySelectorAll('.reveal');
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('active');
+            }
+        });
+    }, { threshold: 0.1 });
+    
+    reveals.forEach(reveal => observer.observe(reveal));
+}
+
+function initScrollSpy() {
+    const sections = document.querySelectorAll('section');
+    const navBtns = document.querySelectorAll('.nav-btn');
+    
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                const currentId = entry.target.getAttribute('id');
+                navBtns.forEach(btn => {
+                    btn.classList.remove('active');
+                    if (btn.getAttribute('data-target') === currentId) {
+                        btn.classList.add('active');
+                    }
+                });
+            }
+        });
+    }, { rootMargin: '-40% 0px -60% 0px' });
+
+    sections.forEach(sec => observer.observe(sec));
+
+    navBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const targetId = btn.getAttribute('data-target');
+            document.getElementById(targetId).scrollIntoView({ behavior: 'smooth' });
+        });
+    });
+}
+
+function openModal(id) { document.getElementById(id).classList.add('active'); }
+function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+function acceptRules() {
+    closeModal('rules-modal');
+    setTimeout(() => openModal('configs-modal'), 300);
+}
+
+function copySub(path, name) {
+    const fullUrl = BASE_URL + path;
+    navigator.clipboard.writeText(fullUrl).then(() => {
+        closeModal('configs-modal');
+        const toast = document.getElementById('toast');
+        document.getElementById('toast-text').innerText = `Спелл-карта [${name}] скопирована!`;
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 3500);
+    });
+}
+
+// --- FUN PANEL EFFECTS (TOUHOU EASTER EGGS) ---
+function initFunPanel() {
+    const btnMist = document.getElementById('btn-mist');
+    const btnDanmaku = document.getElementById('btn-danmaku');
+    const btnBats = document.getElementById('btn-bats');
+    
+    const mistLayer = document.getElementById('mist-layer');
+    
+    let danmakuInterval = null;
+    let batsInterval = null;
+
+    btnMist.addEventListener('click', () => {
+        btnMist.classList.toggle('active');
+        mistLayer.classList.toggle('active');
+    });
+
+    btnDanmaku.addEventListener('click', () => {
+        if (danmakuInterval) {
+            clearInterval(danmakuInterval);
+            danmakuInterval = null;
+            btnDanmaku.classList.remove('active');
+        } else {
+            btnDanmaku.classList.add('active');
+            danmakuInterval = setInterval(() => {
+                const orb = document.createElement('div');
+                orb.className = 'danmaku-bullet';
+                const size = Math.random() * 12 + 6;
+                orb.style.width = size + 'px';
+                orb.style.height = size + 'px';
+                orb.style.left = Math.random() * 100 + 'vw';
+                orb.style.top = '-20px';
+                orb.style.color = Math.random() > 0.5 ? '#f472b6' : '#e11d48';
+                orb.style.backgroundColor = 'currentColor';
+                orb.style.animationDuration = (Math.random() * 3 + 2) + 's';
+                document.body.appendChild(orb);
+                setTimeout(() => orb.remove(), 6000);
+            }, 150);
+        }
+    });
+
+    btnBats.addEventListener('click', () => {
+        if (batsInterval) {
+            clearInterval(batsInterval);
+            batsInterval = null;
+            btnBats.classList.remove('active');
+        } else {
+            btnBats.classList.add('active');
+            batsInterval = setInterval(() => {
+                const bat = document.createElement('div');
+                bat.className = 'bat-spirit';
+                bat.innerHTML = '<i class="fa-solid fa-ghost"></i>';
+                bat.style.color = Math.random() > 0.5 ? '#8b5cf6' : '#e11d48';
+                bat.style.left = '-50px';
+                bat.style.top = (Math.random() * 80 + 10) + 'vh';
+                bat.style.setProperty('--y-end', (Math.random() * 200 - 100) + 'px');
+                bat.style.animationDuration = (Math.random() * 4 + 4) + 's';
+                document.body.appendChild(bat);
+                setTimeout(() => bat.remove(), 9000);
+            }, 800);
+        }
+    });
+}
+
+init();
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,31 @@
+{
+  "rewrites": [
+    {
+      "source": "/sub",
+      "destination": "/sub_all.txt"
+    },
+    {
+      "source": "/sub1",
+      "destination": "/sub_bs.txt"
+    },
+    {
+      "source": "/sub2",
+      "destination": "/sub_chs.txt"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(sub|sub1|sub2)",
+      "headers": [
+        { "key": "Content-Type", "value": "text/plain; charset=utf-8" },
+        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate, max-age=0" }
+      ]
+    },
+    {
+      "source": "/",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+      ]
+    }
+  ]
+}

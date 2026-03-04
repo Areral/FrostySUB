@@ -1,0 +1,118 @@
+name: ⏣ Scarlet Devil Matrix Core
+
+on:
+  schedule:
+    - cron: '0 */4 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: true
+
+jobs:
+  matrix-crawler:
+    name: 🦇 Drone Matrix [${{ matrix.shard }}]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1]
+    
+    steps:
+      - name: ⭳ Initialize Repository
+        uses: actions/checkout@v4
+
+      - name: ⚙ Initialize Python 3.11 Environment
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: ⛨ Install System Modules
+        run: pip install -r requirements.txt
+
+      - name: ☢ Deploy Sing-box Kernel
+        id: singbox-cache
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/bin/sing-box
+          key: singbox-${{ runner.os }}-v1.12.23
+
+      - name: ☢ Install Sing-box (if not cached)
+        if: steps.singbox-cache.outputs.cache-hit != 'true'
+        run: |
+          wget -qO sing-box.tar.gz https://github.com/SagerNet/sing-box/releases/download/v1.12.23/sing-box-1.12.23-linux-amd64.tar.gz
+          tar -xzf sing-box.tar.gz
+          sudo cp sing-box-1.12.23-linux-amd64/sing-box /usr/local/bin/
+          sudo chmod +x /usr/local/bin/sing-box
+          rm -rf sing-box.tar.gz sing-box-1.12.23-linux-amd64
+
+      - name: ⚡ Execute Shard Protocol
+        env:
+          SUBSCRIPTION_SOURCES: ${{ secrets.SUBSCRIPTION_SOURCES }}
+          SHARD_INDEX: ${{ matrix.shard }}
+          SHARD_COUNT: 2
+        run: python main.py
+
+      - name: 📦 Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: shard-data-${{ matrix.shard }}
+          path: |
+            data/sub_*.txt
+            data/stats_*.json
+          retention-days: 1
+
+  matrix-merge:
+    name: 🩸 Nexus Merge
+    needs: matrix-crawler
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: ⭳ Initialize Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: ⚙ Initialize Python 3.11 Environment
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          
+      - name: ⛨ Install System Modules
+        run: pip install -r requirements.txt
+
+      - name: 📥 Download Shard Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: shards_temp
+
+      - name: 🧬 Merge Subscriptions
+        run: |
+          echo "Склеивание шардов..."
+          
+          cat shards_temp/shard-data-*/sub_all_*.txt > sub_all.txt 2>/dev/null || touch sub_all.txt
+          cat shards_temp/shard-data-*/sub_bs_*.txt > sub_bs.txt 2>/dev/null || touch sub_bs.txt
+          cat shards_temp/shard-data-*/sub_chs_*.txt > sub_chs.txt 2>/dev/null || touch sub_chs.txt
+
+      - name: 🌐 Build HTML & Send Report
+        env:
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+        run: python merge.py
+
+      - name: ⭰ Sync & Deploy
+        run: |
+          git config --global user.name "Scarlet Devil Bot"
+          git config --global user.email "bot@scarletdevil.net"
+          git add index.html sub_all.txt sub_bs.txt sub_chs.txt
+          
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          
+          git commit --amend -m "⏣ Scarlet Matrix Sync: $(date -u)" || git commit -m "⏣ Scarlet Matrix Sync: $(date -u)"
+          git push --force

@@ -1,0 +1,43 @@
+# ==========================================
+# SCARLET DEVIL NETWORK | SYSTEM CONFIGURATION
+# ==========================================
+
+# = Управление парсером и дедубликацией =
+# = Колличество акаунтов на 1 сервер =
+parser:
+  max_accounts_per_server: 5
+
+# = Настройки ядра и сетевых запросов =
+system:
+  threads: 25
+  user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+
+# = Настройки HTTP/Speed тестов =
+checking:
+# = Пул Captive-порталов корпораций =
+  connectivity_urls:
+    - "http://www.gstatic.com/generate_204"
+    - "http://cp.cloudflare.com/generate_204"
+    - "http://captive.apple.com/hotspot-detect.html"
+    - "http://edge-http.microsoft.com/captiveportal/generate_204"
+    - "http://detectportal.firefox.com/success.txt"
+    - "http://wifi.vivo.com.cn/generate_204"
+    - "http://connectivitycheck.gstatic.com/generate_204"
+  speedtest_url: "https://speed.cloudflare.com/__down?bytes=5000000"
+  champion_test_url: "https://speed.cloudflare.com/__down?bytes=20000000"
+  min_speed: 1.0
+  max_latency: 5000
+
+# = Настройки генерации HTML =
+app:
+  public_url: "https://scarlet-devil.vercel.app"
+  template_path: "config/web/template.html"
+  channel_tag: "@ScDevNetwork"
+
+# = Базы данных РКН (ТСПУ) =
+whitelist:
+  domains_url: "https://raw.githubusercontent.com/whoahaow/rjsxrd/refs/heads/main/source/config/whitelist-all.txt"
+  ips_url: "https://raw.githubusercontent.com/whoahaow/rjsxrd/refs/heads/main/source/config/cidrwhitelist.txt"
+
+# = Размер батча для Sing-box =
+BATCH_SIZE: 200
