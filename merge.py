@@ -143,7 +143,7 @@ def main():
                     
                 stats["durations"][shard_idx] = data.get("duration", 0.0)
                 
-                for src in data.get("dead_sources", []):
+                for src in data.get("dead_sources",[]):
                     stats["dead_sources"].add(src)
         except Exception as e:
             logger.error(f"Ошибка чтения статы {f_path}: {e}")
