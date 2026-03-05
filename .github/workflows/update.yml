@@ -89,14 +89,6 @@ jobs:
         with:
           path: shards_temp
 
-      - name: 🧬 Merge Subscriptions
-        run: |
-          echo "Склеивание шардов..."
-          
-          cat shards_temp/shard-data-*/sub_all_*.txt > sub_all.txt 2>/dev/null || touch sub_all.txt
-          cat shards_temp/shard-data-*/sub_bs_*.txt > sub_bs.txt 2>/dev/null || touch sub_bs.txt
-          cat shards_temp/shard-data-*/sub_chs_*.txt > sub_chs.txt 2>/dev/null || touch sub_chs.txt
-
       - name: 🌐 Build HTML & Send Report
         env:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
