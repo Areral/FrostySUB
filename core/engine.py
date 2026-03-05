@@ -1,3 +1,5 @@
+# core/engine.py
+
 import asyncio
 import json
 import os
@@ -9,6 +11,8 @@ import ipaddress
 import random
 import socket
 import signal
+import subprocess
+import sys
 import aiohttp
 from aiohttp_socks import ProxyConnector
 from loguru import logger
@@ -17,11 +21,18 @@ from typing import List, Optional
 from core.models import ProxyNode
 from core.settings import CONFIG
 
-CHAMPION_BYTES = 10 * 1024 * 1024
-NORMAL_BYTES = 1 * 1024 * 1024
+CHAMPION_BYTES = 50 * 1024 * 1024
+NORMAL_BYTES = 3 * 1024 * 1024
 CHUNK_SIZE = 65536
 BATCH_HARD_TIMEOUT = 240.0
 
+USER_AGENTS =[
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2.1 Safari/605.1.15",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1"
+]
 
 class BatchEngine:
     _GEO_CACHE: dict = {}
@@ -29,9 +40,9 @@ class BatchEngine:
     _PORT_LOCK: Optional[asyncio.Lock] = None
 
     def __init__(self):
-        self.ping_semaphore = asyncio.Semaphore(300)
+        self.ping_semaphore = asyncio.Semaphore(150)
         self.speed_semaphore = asyncio.Semaphore(8) 
-        logger.info("⚙ Engine готов. Matrix Concurrency Mode + L4 Filter + Payload Filter.")
+        logger.info("⚙ Engine готов. DoH + 3MB Speedtest + UserAgent Matrix.")
 
     @classmethod
     def _ensure_lock(cls):
@@ -90,7 +101,7 @@ class BatchEngine:
     @staticmethod
     def _generate_batch_config(nodes: List[ProxyNode], base_port: int) -> dict:
         inbounds = []
-        outbounds =[]
+        outbounds = []
         rules =[{"protocol": "dns", "outbound": "direct"}]
 
         for i, node in enumerate(nodes):
@@ -115,7 +126,7 @@ class BatchEngine:
         return {
             "log": {"level": "fatal", "output": "discard"},
             "dns": {
-                "servers":[{"tag": "remote", "address": "udp://8.8.8.8", "detour": "direct"}],
+                "servers":[{"tag": "remote-doh", "address": "https://1.1.1.1/dns-query", "detour": "direct"}],
                 "independent_cache": True,
             },
             "inbounds": inbounds,
@@ -193,7 +204,7 @@ class BatchEngine:
                 if c.host: base["transport"]["host"] = c.host
             elif c.type in ("http", "h2"):
                 base["transport"] = {"type": "http", "path": c.path or "/"}
-                if c.host: base["transport"]["host"] =[h.strip() for h in c.host.split(",") if h.strip()]
+                if c.host: base["transport"]["host"] = [h.strip() for h in c.host.split(",") if h.strip()]
             elif c.type == "quic":
                 base["transport"] = {"type": "quic"}
 
@@ -228,7 +239,7 @@ class BatchEngine:
                 if c.alpn:
                     tls["alpn"] =[x.strip() for x in c.alpn.split(",") if x.strip()]
                 elif c.security == "reality":
-                    tls["alpn"] =["h2", "http/1.1"]
+                    tls["alpn"] = ["h2", "http/1.1"]
 
                 if c.security == "reality":
                     clean_pbk = c.pbk or ""
@@ -250,7 +261,7 @@ class BatchEngine:
 
             return base
 
-        except Exception as e:
+        except Exception:
             return None
 
     async def _is_config_valid(self, config_data: dict, batch_id: str) -> bool:
@@ -296,18 +307,18 @@ class BatchEngine:
             await asyncio.sleep(delay_sec)
             
         connector = ProxyConnector.from_url(f"socks5://127.0.0.1:{port}", rdns=True)
-        headers = {"User-Agent": CONFIG.system.get("user_agent", "Mozilla/5.0")}
+        headers = {"User-Agent": random.choice(USER_AGENTS)}
         max_latency = CONFIG.checking.get("max_latency", 5000)
 
         try:
             async with aiohttp.ClientSession(connector=connector, headers=headers) as session:
-                connectivity_urls = CONFIG.checking.get("connectivity_urls", ["http://www.gstatic.com/generate_204"])
+                connectivity_urls = CONFIG.checking.get("connectivity_urls",["http://www.gstatic.com/generate_204"])
                 target_url = random.choice(connectivity_urls) if connectivity_urls else "http://www.gstatic.com/generate_204"
 
                 async with self.ping_semaphore:
                     t0 = time.perf_counter()
                     try:
-                        ping_timeout = aiohttp.ClientTimeout(total=10.0, connect=5.0)
+                        ping_timeout = aiohttp.ClientTimeout(total=8.0, connect=3.0)
                         async with session.get(target_url, allow_redirects=False, timeout=ping_timeout) as resp:
                             if resp.status not in (200, 204, 301, 302): 
                                 return {"status": "error"}
@@ -330,7 +341,7 @@ class BatchEngine:
         latency = node_data["latency"]
         
         connector = ProxyConnector.from_url(f"socks5://127.0.0.1:{port}", rdns=True)
-        headers = {"User-Agent": CONFIG.system.get("user_agent", "Mozilla/5.0")}
+        headers = {"User-Agent": random.choice(USER_AGENTS)}
         min_speed = CONFIG.checking.get("min_speed", 1.0)
         
         try:
@@ -357,7 +368,7 @@ class BatchEngine:
                     except Exception:
                         pass
 
-                if total < 200000:
+                if total < 512 * 1024:
                     return {"status": "drop"}
 
                 dur = max(time.perf_counter() - t_start, 0.1)
@@ -372,12 +383,12 @@ class BatchEngine:
                 if cache_key in BatchEngine._GEO_CACHE:
                     country = BatchEngine._GEO_CACHE[cache_key]
                 else:
-                    async def fetch_geo(url: str, timeout: float) -> str:
+                    async def fetch_geo(geo_url: str, t_out: float) -> str:
                         try:
-                            async with session.get(url, timeout=aiohttp.ClientTimeout(total=timeout)) as geo:
+                            async with session.get(geo_url, timeout=aiohttp.ClientTimeout(total=t_out)) as geo:
                                 if geo.status == 200:
                                     content = await geo.text()
-                                    if "cloudflare" in url:
+                                    if "cloudflare" in geo_url or "trace" in geo_url:
                                         for line in content.splitlines():
                                             if line.startswith("loc="):
                                                 return line.split("=")[1].upper()
@@ -399,25 +410,16 @@ class BatchEngine:
                     ]
                     random.shuffle(geo_services)
                     
-                    for geo_url in geo_services:
-                        res = await fetch_geo(geo_url, 4.0)
+                    for gu in geo_services:
+                        res = await fetch_geo(gu, 4.0)
                         if res not in ("UN", "XX", ""):
                             country = res
                             BatchEngine._GEO_CACHE[cache_key] = country
                             break
 
                     if country in ("UN", "XX", ""):
-                        await asyncio.sleep(1.0)
-                        fallback_urls =[
-                            "http://ip-api.com/json", 
-                            "http://cp.cloudflare.com/cdn-cgi/trace"
-                        ]
-                        for f_url in fallback_urls:
-                            res = await fetch_geo(f_url, 6.0)
-                            if res not in ("UN", "XX", ""):
-                                country = res
-                                BatchEngine._GEO_CACHE[cache_key] = country
-                                break
+                        country = "UN"
+                        BatchEngine._GEO_CACHE[cache_key] = country
 
                 updated_node = node.model_copy(update={"latency": latency, "speed": speed, "country": country})
                 return {"status": "ok", "node": updated_node}
@@ -425,7 +427,7 @@ class BatchEngine:
             return {"status": "error"}
 
     async def check_batch(self, nodes: List[ProxyNode], is_champion: bool = False, batch_num: int = 0) -> List[ProxyNode]:
-        if not nodes: return[]
+        if not nodes: return []
 
         batch_id = uuid.uuid4().hex[:8]
         os.makedirs("data", exist_ok=True)
@@ -451,11 +453,17 @@ class BatchEngine:
             with open(config_path, "w") as f:
                 json.dump(config_data, f)
 
+            kwargs = {}
+            if sys.platform != "win32":
+                kwargs["start_new_session"] = True
+            else:
+                kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+
             proc = await asyncio.create_subprocess_exec(
                 "sing-box", "run", "-c", config_path,
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.PIPE,
-                start_new_session=True,
+                **kwargs
             )
 
             await asyncio.sleep(0.3)
@@ -465,7 +473,7 @@ class BatchEngine:
                     logger.error(f"sing-box упал при старте: {stderr_out.decode(errors='replace')}")
                 except Exception:
                     pass
-                return[]
+                return []
 
             first_port = config_data["inbounds"][0]["listen_port"]
             if not await self._wait_for_port("127.0.0.1", first_port, timeout=5.0):
@@ -501,7 +509,7 @@ class BatchEngine:
                 logger.info(f"   {log_prefix} Ping: {ping_stats['ok']} OK | {ping_stats['timeout']} Timeout | {ping_stats['high_latency']} High Ping | {ping_stats['error']} Err")
                 
                 if not valid_nodes_for_speed:
-                    return[]
+                    return []
 
                 speed_tasks =[self._speed_phase(vp, is_champion) for vp in valid_nodes_for_speed]
                 speed_results = await asyncio.gather(*speed_tasks, return_exceptions=True)
@@ -525,7 +533,7 @@ class BatchEngine:
 
         except asyncio.TimeoutError:
             logger.warning(f"Жесткий таймаут батча {batch_id}.")
-            return[]
+            return []
         except Exception:
             return[]
         finally:
@@ -535,7 +543,10 @@ class BatchEngine:
                     await asyncio.wait_for(proc.wait(), timeout=3.0)
                 except Exception:
                     try:
-                        os.kill(proc.pid, signal.SIGKILL)
+                        if sys.platform != "win32":
+                            os.kill(proc.pid, signal.SIGKILL)
+                        else:
+                            os.kill(proc.pid, signal.CTRL_BREAK_EVENT)
                     except Exception: pass
             if os.path.exists(config_path):
                 try: os.remove(config_path)
@@ -568,14 +579,15 @@ class Inspector:
                 try:
                     await asyncio.wait_for(
                         loop.getaddrinfo(host, port, family=socket.AF_UNSPEC, type=socket.SOCK_STREAM),
-                        timeout=1.5
+                        timeout=1.0
                     )
                 except Exception:
                     return None
 
             try:
+                await asyncio.sleep(random.uniform(0, 0.2))
                 fut = asyncio.open_connection(host, port)
-                reader, writer = await asyncio.wait_for(fut, timeout=1.5)
+                reader, writer = await asyncio.wait_for(fut, timeout=1.0)
                 writer.close()
                 try: 
                     await writer.wait_closed()
@@ -596,7 +608,7 @@ class Inspector:
         total_initial = len(nodes)
         logger.info(f"⏣ Фаза 0: Запуск L4 TCP-Пинга (Префильтрация) для {total_initial} узлов...")
         
-        l4_sem = asyncio.Semaphore(200)
+        l4_sem = asyncio.Semaphore(75)
         chunk_size = 2000
         valid_nodes =[]
         
@@ -619,6 +631,7 @@ class Inspector:
         batch_size = getattr(CONFIG, "BATCH_SIZE", 100)
 
         BatchEngine._GEO_CACHE.clear()
+        
         total_batches = (total + batch_size - 1) // batch_size
         logger.info(f"⏣ Фаза 1: Matrix Protocol. {total} узлов, размер батча: {batch_size}, всего батчей: {total_batches}")
 
