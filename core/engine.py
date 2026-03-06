@@ -318,8 +318,14 @@ class BatchEngine:
                     try:
                         ping_timeout = aiohttp.ClientTimeout(total=10.0, connect=5.0)
                         async with session.get(target_url, allow_redirects=False, timeout=ping_timeout, ssl=False) as resp:
-                            if resp.status not in (200, 204, 301, 302): 
+                            if resp.status == 204:
+                                body = await resp.read()
+                                if len(body) > 0:
+                                    return {"status": "error"}
+                                    
+                            elif resp.status not in (200, 301, 302): 
                                 return {"status": "error"}
+                            
                             latency = int((time.perf_counter() - t0) * 1000)
                     except asyncio.TimeoutError:
                         return {"status": "timeout"}
@@ -359,12 +365,16 @@ class BatchEngine:
                             try:
                                 async for chunk in resp.content.iter_chunked(CHUNK_SIZE):
                                     total += len(chunk)
-                                    if total >= target_bytes: break
+                                    cur_time = time.perf_counter() - t_start
+                                    
+                                    if cur_time > 3.0 and total < 65536:
+                                        return {"status": "low_speed"}
+                                        
+                                    if total >= target_bytes: 
+                                        break
                             except Exception: 
                                 pass 
                     except asyncio.TimeoutError:
-                        pass
-                    except Exception:
                         pass
 
                 if total < 256 * 1024:
@@ -564,37 +574,37 @@ class Inspector:
             return node
             
         async with sem:
-            host = node.config.server
-            port = node.config.port
-            loop = asyncio.get_running_loop()
-            
-            try:
-                ipaddress.ip_address(host.strip("[]"))
-                is_ip = True
-            except ValueError:
-                is_ip = False
-                
-            if not is_ip:
-                try:
-                    await asyncio.wait_for(
-                        loop.getaddrinfo(host, port, family=socket.AF_UNSPEC, type=socket.SOCK_STREAM),
-                        timeout=2.0
-                    )
-                except Exception:
-                    return None
-
-            try:
-                await asyncio.sleep(random.uniform(0, 0.2))
-                fut = asyncio.open_connection(host, port)
-                reader, writer = await asyncio.wait_for(fut, timeout=3.5)
-                writer.close()
-                try: 
-                    await writer.wait_closed()
-                except Exception: 
-                    pass
-                return node
-            except Exception:
+        host = node.config.server.strip("[]")
+        port = node.config.port
+        loop = asyncio.get_running_loop()
+        
+        try:
+            ip_obj = ipaddress.ip_address(host)
+            if ip_obj.is_loopback or ip_obj.is_private:
                 return None
+                
+            forbidden_networks =[
+                "1.1.1.0/24", "1.0.0.0/24", "8.8.8.0/24", "8.8.4.0/24",
+                "162.159.0.0/16", "104.16.0.0/12"
+            ]
+            for net in forbidden_networks:
+                if ip_obj in ipaddress.ip_network(net):
+                    return None
+        except ValueError:
+            pass
+
+        try:
+            await asyncio.sleep(random.uniform(0, 0.2))
+            fut = asyncio.open_connection(host, port)
+            reader, writer = await asyncio.wait_for(fut, timeout=3.5)
+            writer.close()
+            try: 
+                await writer.wait_closed()
+            except Exception: 
+                pass
+            return node
+        except Exception:
+            return None
 
     async def _process_batch_with_sema(self, batch: List[ProxyNode], batch_num: int, total_batches: int) -> List[ProxyNode]:
         async with self.batch_semaphore:
