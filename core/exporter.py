@@ -197,13 +197,9 @@ class Exporter:
             logger.warning("⚠ Пустой список нод — файлы подписок будут пустыми")
             nodes_bs = []
             nodes_chs = []
-            nodes_elite = []
         else:
-            nodes_sorted = sorted(nodes, key=lambda x: x.speed, reverse=True)
-            nodes_elite = nodes_sorted[:100]
-            
-            nodes_bs = [n for n in nodes_sorted if n.is_bs]
-            nodes_chs = [n for n in nodes_sorted if not n.is_bs]
+            nodes_bs = [n for n in nodes if n.is_bs]
+            nodes_chs = [n for n in nodes if not n.is_bs]
             
         suffix = f"_{shard_index}" if shard_index >= 0 else ""
 
@@ -213,7 +209,6 @@ class Exporter:
             (f"sub_all{suffix}.txt", nodes, "Scarlet Devil | Gungnir (MIX)"),
             (f"sub_bs{suffix}.txt", nodes_bs, "Scarlet Devil | Nightbird (БС)"),
             (f"sub_chs{suffix}.txt", nodes_chs, "Scarlet Devil | Vampire Dash (ЧС)"),
-            (f"sub_elite{suffix}.txt", nodes_elite, "Scarlet Devil | Elite (Top-100)"),
         ]:
             try:
                 with open(f"data/{filename}", "w", encoding="utf-8") as f:
