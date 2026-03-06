@@ -38,9 +38,9 @@ class BatchEngine:
     _PORT_LOCK: Optional[asyncio.Lock] = None
 
     def __init__(self):
-        self.ping_semaphore = asyncio.Semaphore(150)
-        self.speed_semaphore = asyncio.Semaphore(8) 
-        logger.info("⚙ Engine готов. Multi-URL Failover + Elite Routing + Adaptive Timeouts.")
+        self.ping_semaphore = asyncio.Semaphore(100)
+        self.speed_semaphore = asyncio.Semaphore(6) 
+        logger.info("⚙ Engine готов. Anti-OOM Protection + Fast Failover Ping.")
 
     @classmethod
     def _ensure_lock(cls):
@@ -319,38 +319,32 @@ class BatchEngine:
         max_latency = CONFIG.checking.get("max_latency", 5000)
         
         all_urls = CONFIG.checking.get("connectivity_urls", ["http://www.gstatic.com/generate_204"])
-        test_urls = random.sample(all_urls, min(3, len(all_urls)))
+        test_urls = random.sample(all_urls, min(2, len(all_urls)))
 
         try:
             async with aiohttp.ClientSession(connector=connector, headers=headers) as session:
                 async with self.ping_semaphore:
                     for target_url in test_urls:
-                        for attempt in range(2):
-                            t0 = time.perf_counter()
-                            try:
-                                ping_timeout = aiohttp.ClientTimeout(total=10.0, connect=5.0)
-                                async with session.get(target_url, allow_redirects=False, timeout=ping_timeout, ssl=False) as resp:
-                                    if resp.status == 204:
-                                        body = await resp.read()
-                                        if len(body) > 0:
-                                            break
-                                    elif resp.status not in (200, 301, 302): 
+                        t0 = time.perf_counter()
+                        try:
+                            ping_timeout = aiohttp.ClientTimeout(total=8.0, connect=4.0)
+                            async with session.get(target_url, allow_redirects=False, timeout=ping_timeout, ssl=False) as resp:
+                                if resp.status == 204:
+                                    body = await resp.read()
+                                    if len(body) > 0:
                                         break
-                                    
-                                    latency = int((time.perf_counter() - t0) * 1000)
-                                    
-                                    if latency > max_latency: 
-                                        return {"status": "high_latency"}
-                                    
-                                    return {"status": "ok", "node": node, "port": port, "latency": latency}
-                                    
-                            except (asyncio.TimeoutError, aiohttp.ClientError, Exception) as e:
-                                err_str = str(e).lower()
-                                if attempt == 0 and ("reset" in err_str or "refused" in err_str or "aborted" in err_str):
-                                    await asyncio.sleep(0.5)
-                                    continue
-                                break
+                                elif resp.status not in (200, 301, 302): 
+                                    break
                                 
+                                latency = int((time.perf_counter() - t0) * 1000)
+                                if latency > max_latency: 
+                                    return {"status": "high_latency"}
+                                
+                                return {"status": "ok", "node": node, "port": port, "latency": latency}
+                                
+                        except (asyncio.TimeoutError, aiohttp.ClientError):
+                            continue
+                            
                     return {"status": "error"}
                             
         except Exception:
@@ -383,7 +377,7 @@ class BatchEngine:
                                     total += len(chunk)
                                     cur_time = time.perf_counter() - t_start
                                     
-                                    if cur_time > 3.0 and total < 65536:
+                                    if cur_time > 3.5 and total < 65536:
                                         return {"status": "low_speed"}
                                         
                                     if total >= target_bytes: 
@@ -566,8 +560,8 @@ class BatchEngine:
         finally:
             if proc and proc.returncode is None:
                 try:
-                    proc.kill()
-                    await asyncio.wait_for(proc.wait(), timeout=3.0)
+                    proc.terminate()
+                    await asyncio.wait_for(proc.wait(), timeout=2.0)
                 except Exception:
                     try:
                         if sys.platform != "win32":
@@ -584,7 +578,7 @@ class BatchEngine:
 class Inspector:
     def __init__(self):
         self.batch_engine = BatchEngine()
-        self.batch_semaphore = asyncio.Semaphore(4)
+        self.batch_semaphore = asyncio.Semaphore(2) 
         self.l4_dropped = 0
 
     async def _l4_check(self, node: ProxyNode, sem: asyncio.Semaphore) -> Optional[ProxyNode]:
@@ -661,7 +655,7 @@ class Inspector:
             return []
 
         alive_total: List[ProxyNode] = []
-        batch_size = getattr(CONFIG, "BATCH_SIZE", 100)
+        batch_size = min(getattr(CONFIG, "BATCH_SIZE", 100), 100)
 
         BatchEngine._GEO_CACHE.clear()
         
