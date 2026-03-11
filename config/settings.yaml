@@ -1,11 +1,19 @@
+# ========================================
+# SCARLET DEVIL NETWORK — ЯДРО УПРАВЛЕНИЯ 
+# ========================================
+
 parser:
+  # = Максимальное количество профилей, забираемых с одного IP сервера =
   max_accounts_per_server: 5
 
 system:
+  # = Количество параллельных потоков для системных вызовов =
   threads: 25
+  # = Юзер-агент для обхода базовой защиты источников =
   user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
 
 checking:
+  # = Массив URL для тестирования Fake 200 OK =
   connectivity_urls:
     - "http://www.gstatic.com/generate_204"
     - "http://cp.cloudflare.com/generate_204"
@@ -14,22 +22,35 @@ checking:
     - "http://detectportal.firefox.com/success.txt"
     - "http://wifi.vivo.com.cn/generate_204"
     - "http://connectivitycheck.gstatic.com/generate_204"
+    
+  # = Тестовые файлы для замера скорости (3MB - Обычный, 10MB - Чемпион) =
   speedtest_url: "https://speed.cloudflare.com/__down?bytes=5000000"
   champion_test_url: "https://speed.cloudflare.com/__down?bytes=20000000"
+  
+  # = Минимальная скорость в Mbps для пропуска узла в финальный лист =
   min_speed: 1.0
+  # = Максимально допустимая задержка HTTP ответа =
   max_latency: 5000
 
 app:
+  # = Публичный URL дашборда =
   public_url: "https://scarlet-devil.vercel.app"
   template_path: "config/web/template.html"
+  # = Тег канала для встраивания в имена узлов =
   channel_tag: "@ScDevNetwork"
 
 whitelist:
+  # = Ссылки на RAW-базы доменов ТСПУ и РКН (Обход Белых Списков) =
   domains_urls:
     - "https://raw.githubusercontent.com/whoahaow/rjsxrd/refs/heads/main/source/config/whitelist-all.txt"
     - "https://raw.githubusercontent.com/hxehex/russia-mobile-internet-whitelist/refs/heads/main/whitelist.txt"
+  # = Ссылки на подсети (CIDR) =
   ips_urls:
     - "https://raw.githubusercontent.com/whoahaow/rjsxrd/refs/heads/main/source/config/cidrwhitelist.txt"
     - "https://raw.githubusercontent.com/hxehex/russia-mobile-internet-whitelist/refs/heads/main/cidrwhitelist.txt"
 
-BATCH_SIZE: 200
+# ==============================
+# ОРКЕСТРАЦИЯ НАГРУЗКИ SING-BOX
+# ==============================
+
+BATCH_SIZE: 100
