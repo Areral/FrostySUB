@@ -8,7 +8,9 @@ from loguru import logger
 from core.settings import CONFIG
 
 async def send_telegram_report(stats: dict):
+    logger.info("Nexus: Инициализация отправки отчета в Telegram")
     if not CONFIG.TG_BOT_TOKEN or not CONFIG.TG_CHAT_ID: 
+        logger.warning("Nexus: TG_BOT_TOKEN или TG_CHAT_ID не заданы. Пропуск отправки отчета.")
         return
         
     public_url = CONFIG.app.get("public_url", "")
@@ -33,23 +35,38 @@ async def send_telegram_report(stats: dict):
         
     msg += f"{dead_text}\n━━━━━━━━━━━━━━━━━━\n🩸 <a href='{public_url}'>Mansion Status</a>"
 
-    payload = {"chat_id": CONFIG.TG_CHAT_ID, "text": msg, "parse_mode": "HTML", "disable_web_page_preview": True}
-    if CONFIG.TG_TOPIC_ID: payload["message_thread_id"] = CONFIG.TG_TOPIC_ID
+    payload = {
+        "chat_id": CONFIG.TG_CHAT_ID, 
+        "text": msg, 
+        "parse_mode": "HTML", 
+        "disable_web_page_preview": True
+    }
+    
+    if CONFIG.TG_TOPIC_ID: 
+        try:
+            payload["message_thread_id"] = int(CONFIG.TG_TOPIC_ID)
+            logger.debug(f"Nexus: Привязка сообщения к топику (message_thread_id={payload['message_thread_id']})")
+        except ValueError:
+            logger.error(f"Nexus: ОШИБКА! Неверный формат TG_TOPIC_ID ('{CONFIG.TG_TOPIC_ID}'). Ожидалось целое число.")
+            
     url = f"https://api.telegram.org/bot{CONFIG.TG_BOT_TOKEN}/sendMessage"
     
     async with aiohttp.ClientSession() as session:
         try: 
             async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=15)) as resp:
                 resp.raise_for_status()
-        except Exception:
-            pass
+                logger.info("Nexus: Telegram-отчет успешно доставлен")
+        except Exception as e:
+            logger.error(f"Nexus: Сбой отправки в Telegram: {e}")
 
 def build_html(total_alive: int, top_speed: float):
+    logger.info("Nexus: Генерация Dashboard (index.html)")
     template_path = "config/web/template.html"
     css_path = "config/web/style.css"
     js_path = "config/web/main.js"
 
     if not os.path.exists(template_path): 
+        logger.error(f"Nexus: Отсутствует шаблон {template_path}")
         return
 
     try:
@@ -79,10 +96,13 @@ def build_html(total_alive: int, top_speed: float):
         )
         with open("index.html", "w", encoding="utf-8") as f:
             f.write(html_out)
-    except Exception:
-        pass
+            
+        logger.info("Nexus: Dashboard успешно скомпилирован")
+    except Exception as e:
+        logger.error(f"Nexus: Ошибка при генерации HTML: {e}")
 
 def merge_subscription_files(pattern: str, output_file: str, title: str):
+    logger.info(f"Nexus: Склейка подписок по паттерну {pattern} (Target: {output_file})")
     files = glob.glob(pattern)
     unique_map = {}
     
@@ -97,8 +117,8 @@ def merge_subscription_files(pattern: str, output_file: str, title: str):
                     base_uri = line.split('#')[0]
                     if base_uri not in unique_map:
                         unique_map[base_uri] = line
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Nexus: Ошибка чтения артефакта {f_path}: {e}")
 
     sorted_links = list(unique_map.values())
     sorted_links.sort()
@@ -109,9 +129,14 @@ def merge_subscription_files(pattern: str, output_file: str, title: str):
         for link in sorted_links:
             f.write(f"{link}\n")
             
+    logger.info(f"Nexus: Файл {output_file} собран (Уникальных узлов: {len(sorted_links)})")
     return len(sorted_links)
 
 def main():
+    logger.info("================================================")
+    logger.info("🩸 Запуск Scarlet Nexus (Сборка и Дедупликация)")
+    logger.info("================================================")
+    
     stats = {
         "parsed": 0,
         "l4_dropped": 0,
@@ -123,6 +148,8 @@ def main():
     }
     
     stat_files = glob.glob("shards_temp/shard-data-*/stats_*.json")
+    logger.info(f"Nexus: Найдено файлов статистики от дронов: {len(stat_files)}")
+    
     for f_path in stat_files:
         try:
             shard_idx = f_path.split("stats_")[-1].replace(".json", "")
@@ -139,8 +166,8 @@ def main():
                 
                 for src in data.get("dead_sources", []):
                     stats["dead_sources"].add(src)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Nexus: Ошибка парсинга метрик {f_path}: {e}")
 
     stats["unique_alive"] = merge_subscription_files("shards_temp/shard-data-*/sub_all_*.txt", "sub_all.txt", "Scarlet Devil | Gungnir (MIX)")
     stats["bs_count"] = merge_subscription_files("shards_temp/shard-data-*/sub_bs_*.txt", "sub_bs.txt", "Scarlet Devil | Nightbird (БС)")
@@ -148,6 +175,10 @@ def main():
     
     build_html(stats["unique_alive"], stats["top_speed"])
     asyncio.run(send_telegram_report(stats))
+    
+    logger.info("======================================================")
+    logger.info("🩸 Nexus завершил работу. Данные готовы к публикации.")
+    logger.info("======================================================")
 
 if __name__ == "__main__":
     main()
