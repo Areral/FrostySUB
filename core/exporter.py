@@ -4,6 +4,7 @@ import json
 import hashlib
 import ipaddress
 import base64
+from loguru import logger
 from typing import List, Dict, Any, Optional
 
 from core.models import ProxyNode
@@ -167,7 +168,8 @@ class Exporter:
 
                 return f"hysteria2://{c.password}@{host_for_uri}:{port}?{Exporter._urlencode(q)}#{encoded_name}"
 
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Exporter: Ошибка сборки URL для {node.strict_id}: {e}")
             pass
 
         try:
@@ -178,6 +180,7 @@ class Exporter:
 
     @staticmethod
     def generate_subscription(nodes: List[ProxyNode], title: str) -> str:
+        logger.debug(f"Exporter: Генерация тела подписки '{title}' для {len(nodes)} узлов")
         channel_tag = CONFIG.app.get("channel_tag", "@ScarletDevilNet")
         lines = [f"#profile-title: {title}", "#profile-update-interval: 6"]
         for node in sorted(nodes, key=lambda x: x.speed, reverse=True):
@@ -191,6 +194,7 @@ class Exporter:
 
     @staticmethod
     def save_files(nodes: List[ProxyNode], shard_index: int = -1, parsed_count: int = 0, dead_sources: List[str] = None, duration: float = 0.0, l4_dropped: int = 0):
+        logger.info(f"Exporter: Старт сохранения {len(nodes)} узлов в физические файлы (Shard {shard_index})")
         if not nodes:
             nodes_bs = []
             nodes_chs = []
@@ -210,7 +214,9 @@ class Exporter:
             try:
                 with open(f"data/{filename}", "w", encoding="utf-8") as f:
                     f.write(Exporter.generate_subscription(node_list, title))
-            except Exception:
+                logger.debug(f"Exporter: Файл {filename} успешно сохранён ({len(node_list)} узлов)")
+            except Exception as e:
+                logger.error(f"Exporter: Ошибка записи {filename}: {e}")
                 pass
                 
         top_speed = max((n.speed for n in nodes), default=0.0) if nodes else 0.0
@@ -226,5 +232,7 @@ class Exporter:
         try:
             with open(f"data/stats{suffix}.json", "w", encoding="utf-8") as f:
                 json.dump(stats, f)
-        except Exception:
+            logger.info(f"Exporter: Экспорт телеметрии завершен (stats{suffix}.json)")
+        except Exception as e:
+            logger.error(f"Exporter: Ошибка записи статистики: {e}")
             pass
