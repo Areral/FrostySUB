@@ -1,23 +1,29 @@
 {
   "rewrites": [
+    { "source": "/sub", "destination": "/sub_all.txt" },
+    { "source": "/sub1", "destination": "/sub_bs.txt" },
+    { "source": "/sub2", "destination": "/sub_chs.txt" },
     { "source": "/sub/all", "destination": "/sub_all.txt" },
     { "source": "/sub/bs", "destination": "/sub_bs.txt" },
     { "source": "/sub/chs", "destination": "/sub_chs.txt" },
-    { "source": "/sub/elite", "destination": "/sub_elite.txt" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [
     {
-      "source": "/sub/(.*)",
+      "source": "/(.*sub.*)",
       "headers": [
         { "key": "Content-Type", "value": "text/plain; charset=utf-8" },
-        { "key": "Cache-Control", "value": "s-maxage=0, max-age=0, must-revalidate" }
+        { "key": "Cache-Control", "value": "public, s-maxage=0, max-age=0, must-revalidate, no-store" },
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET, OPTIONS" }
       ]
     },
     {
       "source": "/(.*)",
       "headers": [
-        { "key": "Cache-Control", "value": "s-maxage=0, max-age=0, must-revalidate" }
+        { "key": "Cache-Control", "value": "public, s-maxage=0, max-age=0, must-revalidate" },
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" }
       ]
     }
   ]
