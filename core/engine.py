@@ -40,6 +40,7 @@ class BatchEngine:
     def __init__(self):
         self.ping_semaphore = asyncio.Semaphore(100)
         self.speed_semaphore = asyncio.Semaphore(6) 
+        logger.debug("BatchEngine: Инициализация ядра Sing-box (Семафоры Ping=100, Speed=6)")
 
     @classmethod
     def _ensure_lock(cls):
@@ -97,6 +98,7 @@ class BatchEngine:
 
     @staticmethod
     def _generate_batch_config(nodes: List[ProxyNode], base_port: int) -> dict:
+        logger.debug(f"BatchEngine: Генерация JSON-конфигурации Sing-box для {len(nodes)} узлов, стартовый порт {base_port}")
         inbounds = []
         outbounds = []
         
@@ -275,6 +277,7 @@ class BatchEngine:
             return None
 
     async def _is_config_valid(self, config_data: dict, batch_id: str) -> bool:
+        logger.debug(f"BatchEngine: Pre-check валидности JSON конфигурации для Batch {batch_id}")
         if not config_data.get("inbounds"): return False
             
         cfg_path = f"data/check_{batch_id}.json"
@@ -289,7 +292,8 @@ class BatchEngine:
             )
             stdout, stderr = await proc.communicate()
             return proc.returncode == 0
-        except Exception:
+        except Exception as e:
+            logger.debug(f"BatchEngine: Ошибка _is_config_valid: {e}")
             return False
         finally:
             if os.path.exists(cfg_path):
@@ -298,6 +302,7 @@ class BatchEngine:
 
     @staticmethod
     async def _wait_for_port(host: str, port: int, timeout: float = 5.0) -> bool:
+        logger.debug(f"BatchEngine: Ожидание открытия порта {host}:{port}")
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             try:
@@ -313,6 +318,7 @@ class BatchEngine:
         return False
 
     async def _ping_phase(self, node: ProxyNode, port: int, delay_sec: float) -> dict:
+        logger.debug(f"BatchEngine: Запуск Ping-фазы для {node.config.server}:{node.config.port} на локальном порту {port}")
         if delay_sec > 0:
             await asyncio.sleep(delay_sec)
             
@@ -332,30 +338,38 @@ class BatchEngine:
                             ping_timeout = aiohttp.ClientTimeout(total=5.0, connect=3.0)
                             async with session.get(target_url, allow_redirects=False, timeout=ping_timeout, ssl=False) as resp:
                                 if resp.status != 204:
+                                    logger.debug(f"BatchEngine: Ping {node.config.server} отклонён (Hijack - HTTP {resp.status})")
                                     break
                                 
                                 body = await resp.content.read(1024) 
                                 if len(body) > 0:
+                                    logger.debug(f"BatchEngine: Ping {node.config.server} отклонён (Hijack - Payload != 0)")
                                     break
                                 
                                 latency = int((time.perf_counter() - t0) * 1000)
                                 if latency > max_latency: 
+                                    logger.debug(f"BatchEngine: Ping {node.config.server} отклонён (Latency {latency}ms > {max_latency}ms)")
                                     return {"status": "high_latency"}
                                 
+                                logger.debug(f"BatchEngine: Ping {node.config.server} успешен (Latency {latency}ms)")
                                 return {"status": "ok", "node": node, "port": port, "latency": latency}
                                 
-                        except (asyncio.TimeoutError, aiohttp.ClientError):
+                        except (asyncio.TimeoutError, aiohttp.ClientError) as e:
+                            logger.debug(f"BatchEngine: Ping {node.config.server} ошибка ({e})")
                             continue
                             
                     return {"status": "error"}
                             
-        except Exception:
+        except Exception as e:
+            logger.debug(f"BatchEngine: Критическая ошибка Ping фазы: {e}")
             return {"status": "error"}
 
     async def _speed_phase(self, node_data: dict, is_champion: bool) -> dict:
         node = node_data["node"]
         port = node_data["port"]
         latency = node_data["latency"]
+        
+        logger.debug(f"BatchEngine: Запуск Speed-фазы для {node.config.server}")
         
         connector = ProxyConnector.from_url(f"socks5://127.0.0.1:{port}", rdns=True)
         headers = {"User-Agent": random.choice(USER_AGENTS)}
@@ -376,6 +390,7 @@ class BatchEngine:
                                 total = target_bytes
                                 t_start = time.perf_counter() - 2.0 
                             elif resp.status != 200: 
+                                logger.debug(f"BatchEngine: Speed {node.config.server} ошибка (HTTP {resp.status})")
                                 return {"status": "error"}
                             else:
                                 try:
@@ -384,6 +399,7 @@ class BatchEngine:
                                         cur_time = time.perf_counter() - t_start
                                         
                                         if cur_time > 3.5 and total < 65536:
+                                            logger.debug(f"BatchEngine: Speed {node.config.server} отклонён (Чрезвычайно низкая скорость)")
                                             return {"status": "low_speed"}
                                             
                                         if total >= target_bytes: 
@@ -392,16 +408,19 @@ class BatchEngine:
                                     pass 
                     except asyncio.TimeoutError:
                         pass
-                    except Exception:
+                    except Exception as e:
+                        logger.debug(f"BatchEngine: Speed {node.config.server} ошибка загрузки ({e})")
                         pass
 
                 if total < 256 * 1024:
+                    logger.debug(f"BatchEngine: Speed {node.config.server} отклонён (Dropped Payload < 256KB)")
                     return {"status": "drop"}
 
                 dur = max(time.perf_counter() - t_start, 0.1)
                 speed = round(min((total * 8) / (dur * 1_000_000), 3000.0), 1)
 
                 if speed < min_speed: 
+                    logger.debug(f"BatchEngine: Speed {node.config.server} отклонён (Скорость {speed} Mbps < {min_speed} Mbps)")
                     return {"status": "low_speed"}
 
                 country = "UN"
@@ -449,12 +468,15 @@ class BatchEngine:
                         BatchEngine._GEO_CACHE[cache_key] = country
 
                 updated_node = node.model_copy(update={"latency": latency, "speed": speed, "country": country})
+                logger.debug(f"BatchEngine: Speed {node.config.server} успешен ({speed} Mbps, Geo: {country})")
                 return {"status": "ok", "node": updated_node}
-        except Exception:
+        except Exception as e:
+            logger.debug(f"BatchEngine: Критическая ошибка Speed фазы: {e}")
             return {"status": "error"}
 
     async def check_batch(self, nodes: List[ProxyNode], is_champion: bool = False, batch_num: int = 0) -> List[ProxyNode]:
         if not nodes: return []
+        logger.info(f"BatchEngine: Старт тестирования Batch {batch_num} (Узлов: {len(nodes)})")
 
         batch_id = uuid.uuid4().hex[:8]
         os.makedirs("data", exist_ok=True)
@@ -463,14 +485,19 @@ class BatchEngine:
         config_data = self._generate_batch_config(nodes, base_port)
         
         if not await self._is_config_valid(config_data, batch_id):
+            logger.warning(f"BatchEngine: Batch {batch_num} поврежден. Запуск Isolation-проверки узлов...")
             valid_nodes =[]
             for n in nodes:
                 single_cfg = self._generate_batch_config([n], base_port)
                 if await self._is_config_valid(single_cfg, batch_id):
                     valid_nodes.append(n)
+                else:
+                    logger.debug(f"BatchEngine: Изоляция выявила бракованный узел {n.config.server}")
             
             nodes = valid_nodes
-            if not nodes: return[]
+            if not nodes: 
+                logger.warning(f"BatchEngine: Batch {batch_num} полностью мертв после изоляции")
+                return[]
             config_data = self._generate_batch_config(nodes, base_port)
 
         config_path = f"data/run_{batch_id}.json"
@@ -486,6 +513,7 @@ class BatchEngine:
             else:
                 kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
 
+            logger.debug(f"BatchEngine: Запуск ядра Sing-box для Batch {batch_id}")
             proc = await asyncio.create_subprocess_exec(
                 "sing-box", "run", "-c", config_path,
                 stdout=asyncio.subprocess.DEVNULL,
@@ -495,10 +523,12 @@ class BatchEngine:
 
             await asyncio.sleep(0.3)
             if proc.returncode is not None:
+                logger.error(f"BatchEngine: Ядро Sing-box (Batch {batch_id}) упало при запуске")
                 return []
 
             first_port = config_data["inbounds"][0]["listen_port"]
             if not await self._wait_for_port("127.0.0.1", first_port, timeout=5.0):
+                logger.error(f"BatchEngine: Тайм-аут ожидания SOCKS5 портов для Batch {batch_id}")
                 return[]
                 
             await asyncio.sleep(1.0)
@@ -513,6 +543,7 @@ class BatchEngine:
                         ping_tasks.append(self._ping_phase(nodes[i], base_port + i, delay))
                         delay += 0.01
 
+                logger.debug(f"BatchEngine: Batch {batch_num} - Ожидание Ping-фазы...")
                 ping_results = await asyncio.gather(*ping_tasks, return_exceptions=True)
                 
                 ping_stats = {"ok": 0, "timeout": 0, "high_latency": 0, "error": 0}
@@ -527,9 +558,13 @@ class BatchEngine:
                     else:
                         ping_stats["error"] += 1
                             
+                logger.info(f"BatchEngine: Batch {batch_num} Ping Stats: {ping_stats}")
+                
                 if not valid_nodes_for_speed:
+                    logger.info(f"BatchEngine: Batch {batch_num} Speed-фаза отменена (Нет рабочих узлов)")
                     return []
 
+                logger.debug(f"BatchEngine: Batch {batch_num} - Ожидание Speed-фазы...")
                 speed_tasks =[self._speed_phase(vp, is_champion) for vp in valid_nodes_for_speed]
                 speed_results = await asyncio.gather(*speed_tasks, return_exceptions=True)
                 
@@ -545,13 +580,16 @@ class BatchEngine:
                     else:
                         speed_stats["error"] += 1
                         
+                logger.info(f"BatchEngine: Batch {batch_num} Speed Stats: {speed_stats}. Живых: {len(alive_nodes)}")
                 return alive_nodes
 
             alive_nodes = await asyncio.wait_for(run_phases(), timeout=BATCH_HARD_TIMEOUT)
 
         except asyncio.TimeoutError:
+            logger.error(f"BatchEngine: Глобальный Timeout ({BATCH_HARD_TIMEOUT}s) для Batch {batch_id}")
             return []
-        except Exception:
+        except Exception as e:
+            logger.error(f"BatchEngine: Исключение в check_batch ({batch_id}): {e}")
             return[]
         finally:
             if proc and proc.returncode is None:
@@ -569,6 +607,7 @@ class BatchEngine:
                 try: os.remove(config_path)
                 except Exception: pass
 
+        logger.info(f"BatchEngine: Завершение работы Batch {batch_num}")
         return alive_nodes
 
 class Inspector:
@@ -576,6 +615,7 @@ class Inspector:
         self.batch_engine = BatchEngine()
         self.batch_semaphore = asyncio.Semaphore(2) 
         self.l4_dropped = 0
+        logger.debug("Inspector: Инициализация модуля глубокой проверки (L4 Semaphore=75)")
 
     async def _l4_check(self, node: ProxyNode, sem: asyncio.Semaphore) -> Optional[ProxyNode]:
         if node.protocol in ("hysteria2", "quic"):
@@ -605,10 +645,12 @@ class Inspector:
                         ip_str = addr_info[0][4][0]
                         
                     ip_obj = ipaddress.ip_address(ip_str)
-                except Exception:
+                except Exception as e:
+                    logger.debug(f"Inspector: L4 DNS Сбой ({e}) для {host}")
                     return None 
 
             if ip_obj.is_loopback or ip_obj.is_private:
+                logger.debug(f"Inspector: L4 Local/Private IP Drop ({ip_obj}) для {host}")
                 return None
                     
             is_cdn_allowed = node.config.type in ("ws", "websocket", "httpupgrade", "xhttp", "grpc")
@@ -621,6 +663,7 @@ class Inspector:
                 for net_str in forbidden_networks:
                     try:
                         if ip_obj in ipaddress.ip_network(net_str):
+                            logger.debug(f"Inspector: L4 CDN/Anycast Drop ({ip_obj} in {net_str}) для {host}")
                             return None
                     except TypeError:
                         pass
@@ -634,17 +677,21 @@ class Inspector:
                     await writer.wait_closed()
                 except Exception: 
                     pass
+                logger.debug(f"Inspector: L4 Success (TCP Handshake OK) для {ip_str}:{port}")
                 return node
-            except Exception:
+            except Exception as e:
+                logger.debug(f"Inspector: L4 Socket/Timeout ({e}) для {ip_str}:{port}")
                 return None
 
     async def _process_batch_with_sema(self, batch: List[ProxyNode], batch_num: int, total_batches: int) -> List[ProxyNode]:
         async with self.batch_semaphore:
+            logger.info(f"Inspector: Вход в семафор для Batch {batch_num}/{total_batches}")
             results = await self.batch_engine.check_batch(batch, batch_num=batch_num)
             return results
 
     async def process_all(self, nodes: List[ProxyNode]) -> List[ProxyNode]:
         total_initial = len(nodes)
+        logger.info(f"Inspector: Старт L4 Пре-фильтрации для {total_initial} узлов")
         
         l4_sem = asyncio.Semaphore(75)
         chunk_size = 500
@@ -658,8 +705,10 @@ class Inspector:
         nodes = valid_nodes
         total = len(nodes)
         self.l4_dropped += (total_initial - total)
+        logger.info(f"Inspector: L4 Фильтрация завершена. Убито: {self.l4_dropped}. Допущено к Sing-box: {total}")
         
         if not nodes:
+            logger.warning("Inspector: Нет валидных узлов после L4 проверки. Завершение process_all.")
             return []
 
         alive_total: List[ProxyNode] =[]
@@ -668,6 +717,7 @@ class Inspector:
         BatchEngine._GEO_CACHE.clear()
         
         total_batches = (total + batch_size - 1) // batch_size
+        logger.info(f"Inspector: Генерация {total_batches} батчей (Размер: {batch_size})")
 
         tasks =[]
         for i in range(0, total, batch_size):
@@ -681,9 +731,11 @@ class Inspector:
             if isinstance(res, list):
                 alive_total.extend(res)
 
+        logger.info(f"Inspector: Инспекция полностью завершена. Выжило узлов: {len(alive_total)}")
         return alive_total
 
     async def champion_run(self, nodes: List[ProxyNode]) -> float:
+        logger.info("Inspector: Запуск Champion Run (поиск абсолютного рекорда скорости)")
         if not nodes: return 0.0
 
         nodes.sort(key=lambda x: x.speed, reverse=True)
@@ -703,4 +755,5 @@ class Inspector:
             else:
                 pass
 
+        logger.info(f"Inspector: Champion Run завершен. Рекорд: {max_speed} Mbps")
         return max_speed
