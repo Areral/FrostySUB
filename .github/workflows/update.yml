@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1]
+        shard: [0, 1, 2, 3]
     
     steps:
       - name: ⭳ Initialize Repository
@@ -51,7 +51,7 @@ jobs:
         env:
           SUBSCRIPTION_SOURCES: ${{ secrets.SUBSCRIPTION_SOURCES }}
           SHARD_INDEX: ${{ matrix.shard }}
-          SHARD_COUNT: 2
+          SHARD_COUNT: 4
         run: python main.py
 
       - name: 📦 Upload Artifacts
@@ -93,6 +93,7 @@ jobs:
         env:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          TG_TOPIC_ID: ${{ secrets.TG_TOPIC_ID }}
         run: python merge.py
 
       - name: ⭰ Sync & Deploy
