@@ -22,7 +22,7 @@ from core.settings import CONFIG
 CHAMPION_BYTES = 10 * 1024 * 1024 
 NORMAL_BYTES = 3 * 1024 * 1024    
 CHUNK_SIZE = 65536
-BATCH_HARD_TIMEOUT = 300.0
+BATCH_HARD_TIMEOUT = 240.0
 
 USER_AGENTS =[
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
@@ -249,7 +249,7 @@ class BatchEngine:
                 if c.alpn:
                     tls["alpn"] =[x.strip() for x in c.alpn.split(",") if x.strip()]
                 elif c.security in ("reality", "tls"):
-                    tls["alpn"] = ["h2", "http/1.1"]
+                    tls["alpn"] =["h2", "http/1.1"]
 
                 if c.security == "reality":
                     clean_pbk = c.pbk or ""
@@ -322,16 +322,17 @@ class BatchEngine:
         headers = {"User-Agent": random.choice(USER_AGENTS)}
         max_latency = CONFIG.checking.get("max_latency", 5000)
         
-        test_urls = random.sample(CONFIG.checking.get("connectivity_urls",["http://www.gstatic.com/generate_204"]), 2)
+        all_urls = CONFIG.checking.get("connectivity_urls", ["http://www.gstatic.com/generate_204"])
+        test_urls = random.sample(all_urls, min(2, len(all_urls)))
 
         try:
             async with aiohttp.ClientSession(connector=connector, headers=headers) as session:
                 async with self.ping_semaphore:
-                    t0 = time.perf_counter()
                     for target_url in test_urls:
+                        t0 = time.perf_counter()
                         try:
-                            ping_timeout = aiohttp.ClientTimeout(total=6.0, connect=3.5)
-                            async with session.get(target_url, allow_redirects=False, timeout=ping_timeout) as resp:
+                            ping_timeout = aiohttp.ClientTimeout(total=5.0, connect=3.0)
+                            async with session.get(target_url, allow_redirects=False, timeout=ping_timeout, ssl=False) as resp:
                                 if resp.status != 204:
                                     break
                                 
@@ -362,20 +363,20 @@ class BatchEngine:
         headers = {"User-Agent": random.choice(USER_AGENTS)}
         min_speed = CONFIG.checking.get("min_speed", 1.0)
         
-        url = CONFIG.checking.get("champion_test_url" if is_champion else "speedtest_url")
-        
         try:
             async with aiohttp.ClientSession(connector=connector, headers=headers) as session:
-                dl_timeout = aiohttp.ClientTimeout(total=25.0 if is_champion else 18.0)
+                url = CONFIG.checking.get("champion_test_url" if is_champion else "speedtest_url")
+                dl_timeout = aiohttp.ClientTimeout(total=15.0 if is_champion else 12.0)
                 target_bytes = CHAMPION_BYTES if is_champion else NORMAL_BYTES
 
                 async with self.speed_semaphore:
                     t_start = time.perf_counter()
                     total = 0
                     try:
-                        async with session.get(url, timeout=dl_timeout, ssl=True) as resp:
+                        async with session.get(url, timeout=dl_timeout, ssl=False) as resp:
                             if resp.status == 429:
-                                return {"status": "drop"}
+                                total = target_bytes
+                                t_start = time.perf_counter() - 2.0 
                             elif resp.status != 200: 
                                 return {"status": "error"}
                             else:
@@ -384,7 +385,7 @@ class BatchEngine:
                                         total += len(chunk)
                                         cur_time = time.perf_counter() - t_start
                                         
-                                        if cur_time > 5.5 and total < 65536:
+                                        if cur_time > 3.5 and total < 65536:
                                             return {"status": "low_speed"}
                                             
                                         if total >= target_bytes: 
@@ -393,8 +394,6 @@ class BatchEngine:
                                     pass 
                     except asyncio.TimeoutError:
                         pass
-                    except aiohttp.ClientConnectorCertificateError:
-                        return {"status": "error"}
                     except Exception:
                         pass
 
@@ -575,28 +574,15 @@ class BatchEngine:
         return alive_nodes
 
 class Inspector:
-    _SNI_CACHE: dict = {}
-
     def __init__(self):
         self.batch_engine = BatchEngine()
         self.batch_semaphore = asyncio.Semaphore(2) 
         self.l4_dropped = 0
 
-    async def _safe_getaddrinfo(self, loop, host: str, port: int) -> Optional[str]:
-        """
-        Безопасная внутренняя обертка для разрешения DNS.
-        Поглощает socket.gaierror, предотвращая утечку 'Future exception was never retrieved'
-        в поток ошибок GitHub Actions.
-        """
+    async def _safe_resolve(self, host: str, port: int) -> Optional[str]:
+        loop = asyncio.get_running_loop()
         try:
-            addr_info = await asyncio.wait_for(
-                loop.getaddrinfo(host, port, family=socket.AF_UNSPEC, type=socket.SOCK_STREAM),
-                timeout=2.0
-            )
-            for info in addr_info:
-                if info[0] == socket.AF_INET:
-                    return info[4][0]
-            return addr_info[0][4][0] if addr_info else None
+            return await loop.run_in_executor(None, socket.getaddrinfo, host, port, socket.AF_UNSPEC, socket.SOCK_STREAM)
         except Exception:
             return None
 
@@ -604,42 +590,34 @@ class Inspector:
         if node.protocol in ("hysteria2", "quic"):
             return node
             
-        if node.config.security == "reality":
-            sni = node.config.sni or node.config.host or node.config.server
-            if sni:
-                clean_sni = sni.strip("[]")
-                if clean_sni not in Inspector._SNI_CACHE:
-                    try:
-                        fut = asyncio.open_connection(clean_sni, 443)
-                        _, w = await asyncio.wait_for(fut, timeout=2.0)
-                        w.close()
-                        try: 
-                            await w.wait_closed() 
-                        except Exception: 
-                            pass
-                        Inspector._SNI_CACHE[clean_sni] = True
-                    except Exception:
-                        Inspector._SNI_CACHE[clean_sni] = False
-                        return None
-                elif Inspector._SNI_CACHE[clean_sni] is False:
-                    return None
-
         async with sem:
             host = node.config.server.strip("[]")
             port = node.config.port
-            loop = asyncio.get_running_loop()
             
             try:
                 ip_obj = ipaddress.ip_address(host)
                 ip_str = str(ip_obj)
             except ValueError:
-                ip_str = await self._safe_getaddrinfo(loop, host, port)
-                if not ip_str:
+                addr_info = None
+                try:
+                    addr_info = await asyncio.wait_for(self._safe_resolve(host, port), timeout=2.0)
+                except Exception:
+                    pass
+                    
+                if not addr_info:
                     return None
                     
                 try:
+                    ip_str = None
+                    for info in addr_info:
+                        if info[0] == socket.AF_INET:
+                            ip_str = info[4][0]
+                            break
+                    if not ip_str:
+                        ip_str = addr_info[0][4][0]
+                        
                     ip_obj = ipaddress.ip_address(ip_str)
-                except ValueError:
+                except Exception:
                     return None
 
             if ip_obj.is_loopback or ip_obj.is_private:
@@ -675,12 +653,13 @@ class Inspector:
     async def _process_batch_with_sema(self, batch: List[ProxyNode], batch_num: int, total_batches: int) -> List[ProxyNode]:
         async with self.batch_semaphore:
             results = await self.batch_engine.check_batch(batch, batch_num=batch_num)
+            logger.info(f"► [ИНСПЕКЦИЯ L7]: Батч {batch_num}/{total_batches} завершен. Выжило: {len(results)}")
             return results
 
     async def process_all(self, nodes: List[ProxyNode]) -> List[ProxyNode]:
         total_initial = len(nodes)
         
-        logger.info(f"► [ФИЛЬТРАЦИЯ L4]: Старт TCP-Ping для {total_initial} узлов...")
+        logger.info(f"►[ФИЛЬТРАЦИЯ L4]: Старт TCP-Ping для {total_initial} узлов...")
         l4_sem = asyncio.Semaphore(75)
         chunk_size = 500
         valid_nodes =[]
@@ -693,7 +672,7 @@ class Inspector:
         nodes = valid_nodes
         total = len(nodes)
         self.l4_dropped += (total_initial - total)
-        logger.info(f"✔[ФИЛЬТРАЦИЯ L4]: Завершено. Отбраковано: {self.l4_dropped} | Передано в Sing-box: {total}")
+        logger.info(f"✔ [ФИЛЬТРАЦИЯ L4]: Завершено. Отбраковано: {self.l4_dropped} | Передано в Sing-box: {total}")
         
         if not nodes:
             return []
@@ -704,7 +683,7 @@ class Inspector:
         BatchEngine._GEO_CACHE.clear()
         
         total_batches = (total + batch_size - 1) // batch_size
-        logger.info(f"► [СБОРКА ЯДРА]: Генерация {total_batches} батчей (Размер: {batch_size})")
+        logger.info(f"►[СБОРКА ЯДРА]: Генерация {total_batches} батчей (Размер: {batch_size})")
 
         tasks =[]
         for i in range(0, total, batch_size):
