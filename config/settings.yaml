@@ -18,11 +18,14 @@ checking:
     - "http://www.gstatic.com/generate_204"
     - "http://cp.cloudflare.com/generate_204"
     - "http://captive.apple.com/hotspot-detect.html"
-    - "http://edge-http.microsoft.com/captiveportal/generate_204"
-    - "http://detectportal.firefox.com/success.txt"
-    - "http://wifi.vivo.com.cn/generate_204"
-    - "http://connectivitycheck.gstatic.com/generate_204"
     
+  # = Статические CDN-ресурсы для доказательства пробития DPI (True Bypass) =
+  bypass_urls:
+    - "https://abs.twimg.com/favicons/twitter.3.ico"
+    - "https://rutracker.org/favicon.ico"
+    - "https://www.facebook.com/favicon.ico"
+    - "https://static.cdninstagram.com/rsrc.php/v3/yI/r/VsNE-OHk_8a.png"
+
   # = Тестовые файлы для замера скорости (3MB - Обычный, 10MB - Чемпион) =
   speedtest_url: "https://speed.cloudflare.com/__down?bytes=5000000"
   champion_test_url: "https://speed.cloudflare.com/__down?bytes=20000000"
