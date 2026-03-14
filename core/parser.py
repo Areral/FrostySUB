@@ -487,6 +487,8 @@ class LinkParser:
             return ""
 
     async def fetch_and_parse(self) -> List[ProxyNode]:
+        from core.mutator import NodeMutator
+
         logger.info("LinkParser: Запуск глобального парсинга подписок (fetch_and_parse)")
         nodes: List[ProxyNode] =[]
         seen_ids: set = set()
@@ -524,14 +526,12 @@ class LinkParser:
 
             content_hash = hashlib.md5(content.encode('utf-8', errors='ignore')).hexdigest()
             if content_hash in self._seen_content_hashes: 
-                logger.debug(f"LinkParser: Пропуск дублирующегося контента (хэш {content_hash}) из {url}")
                 continue
             self._seen_content_hashes.add(content_hash)
 
             content = LinkParser.decode_sub_base64(content)
-
             lines = content.splitlines()
-            logger.debug(f"LinkParser: Извлечено {len(lines)} строк из источника {url}")
+
             for raw_line in lines:
                 line = raw_line.strip()
                 if not line or line.startswith('#'): continue
@@ -545,7 +545,6 @@ class LinkParser:
                 if node:
                     if node.protocol in ("vless", "vmess", "trojan"):
                         if node.config.security in ("none", "") and node.config.type not in ("ws", "httpupgrade", "xhttp"):
-                            logger.debug(f"LinkParser: Узел {node.protocol} отброшен (Опасность: Insecure Plain TCP)")
                             continue
 
                     if node.strict_id not in seen_ids:
@@ -554,11 +553,14 @@ class LinkParser:
                         if machine_counts.get(m_id, 0) < max_accounts_per_server:
                             node.source_url = url
                             node.is_bs = RKNValidator.check_bs(node)
-                            nodes.append(node)
-                            seen_ids.add(node.strict_id)
-                            machine_counts[m_id] = machine_counts.get(m_id, 0) + 1
-                        else:
-                            logger.debug(f"LinkParser: Узел отклонен (Лимит {max_accounts_per_server} акк/сервер превышен) для {m_id}")
+                            
+                            mutated_nodes = NodeMutator.mutate(node)
+                            for m_node in mutated_nodes:
+                                if m_node.strict_id not in seen_ids:
+                                    nodes.append(m_node)
+                                    seen_ids.add(m_node.strict_id)
 
-        logger.info(f"LinkParser: Парсинг завершен. Собрано уникальных узлов: {len(nodes)}")
+                            machine_counts[m_id] = machine_counts.get(m_id, 0) + 1
+
+        logger.info(f"LinkParser: Парсинг завершен. Собрано уникальных узлов (включая мутации): {len(nodes)}")
         return nodes
