@@ -46,7 +46,6 @@ class LinkParser:
         self.semaphore = asyncio.Semaphore(15)
         self.metrics = {}
         self._seen_content_hashes: set = set()
-        logger.debug("LinkParser: Инициализация модуля парсера")
 
     @staticmethod
     def _content_has_protocol_lines(text: str) -> bool:
@@ -64,8 +63,7 @@ class LinkParser:
             missing = len(s) % 4
             if missing: s += "=" * (4 - missing)
             return base64.b64decode(s.encode('ascii', 'ignore')).decode('utf-8', 'ignore')
-        except Exception as e:
-            logger.debug(f"LinkParser: Ошибка decode_base64: {e}")
+        except Exception:
             return s
 
     @staticmethod
@@ -131,7 +129,6 @@ class LinkParser:
 
     @staticmethod
     def _normalize_config(conf: ProxyConfig, protocol: str) -> Optional[ProxyConfig]:
-        logger.debug(f"LinkParser: Нормализация конфига [{protocol}] {conf.server}:{conf.port}")
         if protocol in ("vless", "vmess"):
             if not conf.uuid or not LinkParser._is_valid_uuid(conf.uuid):
                 return None
@@ -203,7 +200,6 @@ class LinkParser:
 
     @staticmethod
     def parse_vless(line: str) -> Optional[ProxyNode]:
-        logger.debug("LinkParser: Парсинг VLESS ссылки")
         if LinkParser._is_garbage(line): return None
         try:
             line = html.unescape(line).replace("/?", "?")
@@ -240,13 +236,11 @@ class LinkParser:
             if not conf: return None
             
             return ProxyNode(protocol="vless", config=conf, raw_uri=line)
-        except Exception as e:
-            logger.debug(f"LinkParser: Сбой парсинга VLESS: {e}")
+        except Exception:
             return None
 
     @staticmethod
     def parse_vmess(line: str) -> Optional[ProxyNode]:
-        logger.debug("LinkParser: Парсинг VMess ссылки")
         if LinkParser._is_garbage(line): return None
         try:
             raw_json = LinkParser.decode_base64(line.replace("vmess://", "").strip())
@@ -286,13 +280,11 @@ class LinkParser:
             if not conf: return None
             
             return ProxyNode(protocol="vmess", config=conf, raw_uri=line)
-        except Exception as e:
-            logger.debug(f"LinkParser: Сбой парсинга VMess: {e}")
+        except Exception:
             return None
 
     @staticmethod
     def parse_trojan(line: str) -> Optional[ProxyNode]:
-        logger.debug("LinkParser: Парсинг Trojan ссылки")
         if LinkParser._is_garbage(line): return None
         try:
             line = html.unescape(line).replace("/?", "?")
@@ -326,13 +318,11 @@ class LinkParser:
             if not conf: return None
             
             return ProxyNode(protocol="trojan", config=conf, raw_uri=line)
-        except Exception as e:
-            logger.debug(f"LinkParser: Сбой парсинга Trojan: {e}")
+        except Exception:
             return None
 
     @staticmethod
     def parse_ss(line: str) -> Optional[ProxyNode]:
-        logger.debug("LinkParser: Парсинг SS ссылки")
         if LinkParser._is_garbage(line): return None
         try:
             original_line = line
@@ -417,13 +407,11 @@ class LinkParser:
             if not conf: return None
             
             return ProxyNode(protocol="ss", config=conf, raw_uri=original_line)
-        except Exception as e:
-            logger.debug(f"LinkParser: Сбой парсинга SS: {e}")
+        except Exception:
             return None
 
     @staticmethod
     def parse_hy2(line: str) -> Optional[ProxyNode]:
-        logger.debug("LinkParser: Парсинг Hysteria2 ссылки")
         if LinkParser._is_garbage(line): return None
         try:
             original_line = line
@@ -456,12 +444,10 @@ class LinkParser:
             if not conf: return None
             
             return ProxyNode(protocol="hysteria2", config=conf, raw_uri=original_line)
-        except Exception as e:
-            logger.debug(f"LinkParser: Сбой парсинга Hysteria2: {e}")
+        except Exception:
             return None
 
     async def _fetch_url_with_retry(self, session: aiohttp.ClientSession, url: str, retries: int = 3) -> str:
-        logger.debug(f"LinkParser: Старт загрузки источника: {url}")
         async with self.semaphore:
             for attempt in range(retries):
                 try:
@@ -469,18 +455,15 @@ class LinkParser:
                     async with session.get(url, timeout=timeout) as resp:
                         if resp.status == 200:
                             content = await resp.text(errors='ignore')
-                            logger.debug(f"LinkParser: Успешно загружено {len(content)} байт из {url}")
+                            logger.debug(f"[FETCH] Успешно ({len(content)} байт) -> {url}")
                             return content
                         if resp.status == 429:
-                            logger.debug(f"LinkParser: Rate-limit (429) для {url}. Попытка {attempt+1}/{retries}")
                             if attempt < retries - 1:
                                 await asyncio.sleep(2 ** attempt)
                                 continue
                             return ""
-                        logger.debug(f"LinkParser: Ошибка HTTP {resp.status} для {url}")
                         return ""
-                except Exception as e:
-                    logger.debug(f"LinkParser: Ошибка сети ({e}) для {url}. Попытка {attempt+1}/{retries}")
+                except Exception:
                     if attempt < retries - 1:
                         await asyncio.sleep(2 ** attempt)
                         continue
@@ -489,7 +472,7 @@ class LinkParser:
     async def fetch_and_parse(self) -> List[ProxyNode]:
         from core.mutator import NodeMutator
 
-        logger.info("LinkParser: Запуск глобального парсинга подписок (fetch_and_parse)")
+        logger.info("⚔ Запуск Ритуала Извлечения (Global Scraping Protocol)")
         nodes: List[ProxyNode] =[]
         seen_ids: set = set()
         machine_counts: dict = {}
@@ -497,7 +480,7 @@ class LinkParser:
         max_accounts_per_server = CONFIG.parser.get("max_accounts_per_server", 5)
         raw_sources = CONFIG.SUBSCRIPTION_SOURCES
         if not raw_sources: 
-            logger.warning("LinkParser: Источники подписок (SUBSCRIPTION_SOURCES) пусты!")
+            logger.error("✘ КРИТИЧЕСКИЙ СБОЙ: Источники подписок (SUBSCRIPTION_SOURCES) не найдены!")
             return[]
 
         if isinstance(raw_sources, list):
@@ -505,7 +488,7 @@ class LinkParser:
         else:
             sources = list(dict.fromkeys(s.strip() for s in raw_sources.splitlines() if s.strip()))
 
-        logger.info(f"LinkParser: Подготовка к скачиванию {len(sources)} уникальных источников")
+        logger.info(f"⭳ Инициация загрузки из {len(sources)} матричных узлов...")
         connector = aiohttp.TCPConnector(limit=15, ttl_dns_cache=300)
         async with aiohttp.ClientSession(connector=connector) as session:
             results = await asyncio.gather(*[self._fetch_url_with_retry(session, url) for url in sources])
@@ -519,7 +502,8 @@ class LinkParser:
             "hysteria2://": self.parse_hy2,
         }
 
-        logger.info("LinkParser: Скачивание завершено. Запуск дешифратора и парсера.")
+        logger.info("⚙ Дешифровка Base64 и санитария узлов...")
+        
         for i, content in enumerate(results):
             if not content: continue
             url = sources[i]
@@ -562,5 +546,5 @@ class LinkParser:
 
                             machine_counts[m_id] = machine_counts.get(m_id, 0) + 1
 
-        logger.info(f"LinkParser: Парсинг завершен. Собрано уникальных узлов (включая мутации): {len(nodes)}")
+        logger.info(f"✔ Ритуал завершен. Собрано сырых узлов-кандидатов: {len(nodes)}")
         return nodes
