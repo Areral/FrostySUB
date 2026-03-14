@@ -289,7 +289,7 @@ class LinkParser:
         try:
             line = html.unescape(line).replace("/?", "?")
             u = urllib.parse.urlparse(line)
-            q = urllib.parse.parse_qs(u.query, keep_blank_values=True)
+            q = urllib.parse.parseqs(u.query, keep_blank_values=True)
             q_simple = {k: v[0] for k, v in q.items() if v}
 
             host = u.hostname
@@ -533,5 +533,5 @@ class LinkParser:
                             seen_ids.add(node.strict_id)
                             machine_counts[m_id] = machine_counts.get(m_id, 0) + 1
 
-        logger.info(f"✔ [ПАРСИНГ]: Завершено. Собрано оригинальных узлов: {len(nodes)}")
+        logger.info(f"✔[ПАРСИНГ]: Завершено. Собрано оригинальных узлов: {len(nodes)}")
         return nodes
