@@ -22,7 +22,7 @@ from core.settings import CONFIG
 CHAMPION_BYTES = 10 * 1024 * 1024 
 NORMAL_BYTES = 3 * 1024 * 1024    
 CHUNK_SIZE = 65536
-BATCH_HARD_TIMEOUT = 240.0
+BATCH_HARD_TIMEOUT = 300.0
 
 USER_AGENTS =[
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
@@ -94,21 +94,6 @@ class BatchEngine:
             except ValueError:
                 return sni
         return None
-
-    @staticmethod
-    def _resolve_payload_ssl(node: ProxyNode, target_url: str) -> bool:
-        if not target_url.startswith("https"):
-            return False
-        if node.config.security == "reality":
-            return True
-        allow_insecure = False
-        for k, v in node.config.raw_meta.items():
-            if k.lower() in ("allowinsecure", "insecure") and str(v).lower() in ("1", "true", "yes"):
-                allow_insecure = True
-                break
-        if allow_insecure:
-            return False
-        return True
 
     @staticmethod
     def _generate_batch_config(nodes: List[ProxyNode], base_port: int) -> dict:
@@ -345,7 +330,7 @@ class BatchEngine:
                     t0 = time.perf_counter()
                     for target_url in test_urls:
                         try:
-                            ping_timeout = aiohttp.ClientTimeout(total=4.0, connect=2.5)
+                            ping_timeout = aiohttp.ClientTimeout(total=6.0, connect=3.5)
                             async with session.get(target_url, allow_redirects=False, timeout=ping_timeout) as resp:
                                 if resp.status != 204:
                                     break
@@ -378,18 +363,17 @@ class BatchEngine:
         min_speed = CONFIG.checking.get("min_speed", 1.0)
         
         url = CONFIG.checking.get("champion_test_url" if is_champion else "speedtest_url")
-        target_ssl = self._resolve_payload_ssl(node, url)
         
         try:
             async with aiohttp.ClientSession(connector=connector, headers=headers) as session:
-                dl_timeout = aiohttp.ClientTimeout(total=15.0 if is_champion else 12.0)
+                dl_timeout = aiohttp.ClientTimeout(total=25.0 if is_champion else 18.0)
                 target_bytes = CHAMPION_BYTES if is_champion else NORMAL_BYTES
 
                 async with self.speed_semaphore:
                     t_start = time.perf_counter()
                     total = 0
                     try:
-                        async with session.get(url, timeout=dl_timeout, ssl=target_ssl) as resp:
+                        async with session.get(url, timeout=dl_timeout, ssl=True) as resp:
                             if resp.status == 429:
                                 return {"status": "drop"}
                             elif resp.status != 200: 
@@ -400,7 +384,7 @@ class BatchEngine:
                                         total += len(chunk)
                                         cur_time = time.perf_counter() - t_start
                                         
-                                        if cur_time > 3.5 and total < 65536:
+                                        if cur_time > 5.5 and total < 65536:
                                             return {"status": "low_speed"}
                                             
                                         if total >= target_bytes: 
@@ -514,7 +498,7 @@ class BatchEngine:
 
             await asyncio.sleep(0.3)
             if proc.returncode is not None:
-                return []
+                return[]
 
             first_port = config_data["inbounds"][0]["listen_port"]
             if not await self._wait_for_port("127.0.0.1", first_port, timeout=5.0):
@@ -682,7 +666,9 @@ class Inspector:
     async def _process_batch_with_sema(self, batch: List[ProxyNode], batch_num: int, total_batches: int) -> List[ProxyNode]:
         async with self.batch_semaphore:
             results = await self.batch_engine.check_batch(batch, batch_num=batch_num)
-            logger.info(f"► [БАТЧ {batch_num}/{total_batches}]: Тестирование завершено (Выжило: {len(results)})")
+            
+            if batch_num % 5 == 0 or batch_num == total_batches:
+                logger.info(f"► [ИНСПЕКЦИЯ L7]: Прогресс... [██████░░░░] Батч {batch_num}/{total_batches} (Выжило: {len(results)})")
             return results
 
     async def process_all(self, nodes: List[ProxyNode]) -> List[ProxyNode]:
@@ -693,10 +679,15 @@ class Inspector:
         chunk_size = 500
         valid_nodes =[]
         
+        processed_l4 = 0
         for i in range(0, total_initial, chunk_size):
             chunk = nodes[i:i+chunk_size]
             res = await asyncio.gather(*(self._l4_check(n, l4_sem) for n in chunk), return_exceptions=True)
             valid_nodes.extend([n for n in res if isinstance(n, ProxyNode)])
+            processed_l4 += len(chunk)
+            
+            if processed_l4 % 10000 < chunk_size:
+                logger.info(f"► [ФИЛЬТРАЦИЯ L4]: Обработано {processed_l4}/{total_initial} узлов...[██████░░░░]")
             
         nodes = valid_nodes
         total = len(nodes)
