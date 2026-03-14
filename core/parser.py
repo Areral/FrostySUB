@@ -454,8 +454,7 @@ class LinkParser:
                     timeout = aiohttp.ClientTimeout(total=20)
                     async with session.get(url, timeout=timeout) as resp:
                         if resp.status == 200:
-                            content = await resp.text(errors='ignore')
-                            return content
+                            return await resp.text(errors='ignore')
                         if resp.status == 429:
                             if attempt < retries - 1:
                                 await asyncio.sleep(2 ** attempt)
@@ -472,7 +471,7 @@ class LinkParser:
         max_accounts_per_server = CONFIG.parser.get("max_accounts_per_server", 5)
         raw_sources = CONFIG.SUBSCRIPTION_SOURCES
         if not raw_sources: 
-            return []
+            return[]
 
         if isinstance(raw_sources, list):
             sources = list(dict.fromkeys(s.strip() for s in raw_sources if s.strip()))
@@ -492,11 +491,9 @@ class LinkParser:
             "hysteria2://": self.parse_hy2,
         }
 
-        nodes: List[ProxyNode] = []
+        nodes: List[ProxyNode] =[]
         seen_ids: set = set()
         machine_counts: dict = {}
-        
-        parsed_total = 0
         
         for i, content in enumerate(results):
             if not content: continue
@@ -521,8 +518,6 @@ class LinkParser:
                         break
                 
                 if node:
-                    parsed_total += 1
-                    
                     if node.protocol in ("vless", "vmess", "trojan"):
                         if node.config.security in ("none", "") and node.config.type not in ("ws", "httpupgrade", "xhttp"):
                             continue
@@ -536,11 +531,7 @@ class LinkParser:
                             
                             nodes.append(node)
                             seen_ids.add(node.strict_id)
-
                             machine_counts[m_id] = machine_counts.get(m_id, 0) + 1
-                            
-                    if parsed_total % 15000 == 0:
-                        logger.info(f"► [ПАРСИНГ]: Извлечено {parsed_total} объектов... [██████░░░░]")
 
         logger.info(f"✔ [ПАРСИНГ]: Завершено. Собрано оригинальных узлов: {len(nodes)}")
         return nodes
