@@ -125,7 +125,7 @@ class BatchEngine:
                 "listen_port": local_port,
             })
             outbounds.append(outbound)
-            rules.append({"inbound": [f"in-{i}"], "outbound": tag})
+            rules.append({"inbound":[f"in-{i}"], "outbound": tag})
 
         outbounds.append({"type": "direct", "tag": "direct"})
         outbounds.append({"type": "block", "tag": "block"})
@@ -582,6 +582,24 @@ class Inspector:
         self.batch_semaphore = asyncio.Semaphore(2) 
         self.l4_dropped = 0
 
+    async def _safe_getaddrinfo(self, loop, host: str, port: int) -> Optional[str]:
+        """
+        Безопасная внутренняя обертка для разрешения DNS.
+        Поглощает socket.gaierror, предотвращая утечку 'Future exception was never retrieved'
+        в поток ошибок GitHub Actions.
+        """
+        try:
+            addr_info = await asyncio.wait_for(
+                loop.getaddrinfo(host, port, family=socket.AF_UNSPEC, type=socket.SOCK_STREAM),
+                timeout=2.0
+            )
+            for info in addr_info:
+                if info[0] == socket.AF_INET:
+                    return info[4][0]
+            return addr_info[0][4][0] if addr_info else None
+        except Exception:
+            return None
+
     async def _l4_check(self, node: ProxyNode, sem: asyncio.Semaphore) -> Optional[ProxyNode]:
         if node.protocol in ("hysteria2", "quic"):
             return node
@@ -615,23 +633,14 @@ class Inspector:
                 ip_obj = ipaddress.ip_address(host)
                 ip_str = str(ip_obj)
             except ValueError:
-                try:
-                    addr_info = await asyncio.wait_for(
-                        loop.getaddrinfo(host, port, family=socket.AF_UNSPEC, type=socket.SOCK_STREAM),
-                        timeout=2.0
-                    )
+                ip_str = await self._safe_getaddrinfo(loop, host, port)
+                if not ip_str:
+                    return None
                     
-                    ip_str = None
-                    for info in addr_info:
-                        if info[0] == socket.AF_INET:
-                            ip_str = info[4][0]
-                            break
-                    if not ip_str:
-                        ip_str = addr_info[0][4][0]
-                        
+                try:
                     ip_obj = ipaddress.ip_address(ip_str)
-                except Exception:
-                    return None 
+                except ValueError:
+                    return None
 
             if ip_obj.is_loopback or ip_obj.is_private:
                 return None
@@ -666,9 +675,6 @@ class Inspector:
     async def _process_batch_with_sema(self, batch: List[ProxyNode], batch_num: int, total_batches: int) -> List[ProxyNode]:
         async with self.batch_semaphore:
             results = await self.batch_engine.check_batch(batch, batch_num=batch_num)
-            
-            if batch_num % 5 == 0 or batch_num == total_batches:
-                logger.info(f"► [ИНСПЕКЦИЯ L7]: Прогресс... [██████░░░░] Батч {batch_num}/{total_batches} (Выжило: {len(results)})")
             return results
 
     async def process_all(self, nodes: List[ProxyNode]) -> List[ProxyNode]:
@@ -679,20 +685,15 @@ class Inspector:
         chunk_size = 500
         valid_nodes =[]
         
-        processed_l4 = 0
         for i in range(0, total_initial, chunk_size):
             chunk = nodes[i:i+chunk_size]
             res = await asyncio.gather(*(self._l4_check(n, l4_sem) for n in chunk), return_exceptions=True)
             valid_nodes.extend([n for n in res if isinstance(n, ProxyNode)])
-            processed_l4 += len(chunk)
-            
-            if processed_l4 % 10000 < chunk_size:
-                logger.info(f"► [ФИЛЬТРАЦИЯ L4]: Обработано {processed_l4}/{total_initial} узлов...[██████░░░░]")
             
         nodes = valid_nodes
         total = len(nodes)
         self.l4_dropped += (total_initial - total)
-        logger.info(f"✔ [ФИЛЬТРАЦИЯ L4]: Завершено. Отбраковано: {self.l4_dropped} | Передано в Sing-box: {total}")
+        logger.info(f"✔[ФИЛЬТРАЦИЯ L4]: Завершено. Отбраковано: {self.l4_dropped} | Передано в Sing-box: {total}")
         
         if not nodes:
             return []
@@ -705,7 +706,7 @@ class Inspector:
         total_batches = (total + batch_size - 1) // batch_size
         logger.info(f"► [СБОРКА ЯДРА]: Генерация {total_batches} батчей (Размер: {batch_size})")
 
-        tasks = []
+        tasks =[]
         for i in range(0, total, batch_size):
             batch = nodes[i: i + batch_size]
             batch_num = i // batch_size + 1
