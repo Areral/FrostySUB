@@ -57,7 +57,7 @@ class Exporter:
     @staticmethod
     def _urlencode(query_dict: Dict[str, Any]) -> str:
         if not query_dict: return ""
-        parts = []
+        parts =[]
         for k, raw_v in query_dict.items():
             if raw_v is None: continue
             
@@ -181,14 +181,16 @@ class Exporter:
     @staticmethod
     def generate_subscription(nodes: List[ProxyNode], title: str) -> str:
         logger.debug(f"Exporter: Генерация тела подписки '{title}' для {len(nodes)} узлов")
-        channel_tag = CONFIG.app.get("channel_tag", "@ScarletDevilNet")
-        lines = [f"#profile-title: {title}", "#profile-update-interval: 6"]
+        channel_tag = CONFIG.app.get("channel_tag", "@ScDevNetwork")
+        lines =[f"#profile-title: {title}", "#profile-update-interval: 6"]
         for node in sorted(nodes, key=lambda x: x.speed, reverse=True):
             flag = Exporter._flag(node.country)
             sni = node.config.sni or node.config.host or node.config.server
             proto = node.protocol.upper()
             short_hash = hashlib.md5(node.strict_id.encode("utf-8")).hexdigest()[:4].upper()
-            name = f"{flag} {node.country} | {sni} | {proto}[{short_hash}] | {channel_tag}"
+            
+            name = f"{flag} {node.country} | {sni} | {proto} [{short_hash}] | {channel_tag}"
+            
             lines.append(Exporter._build_url(node, name))
         return "\n".join(lines)
 
@@ -197,7 +199,7 @@ class Exporter:
         logger.info(f"Exporter: Старт сохранения {len(nodes)} узлов в физические файлы (Shard {shard_index})")
         if not nodes:
             nodes_bs = []
-            nodes_chs = []
+            nodes_chs =[]
         else:
             nodes_bs = [n for n in nodes if n.is_bs]
             nodes_chs = [n for n in nodes if not n.is_bs]
@@ -206,7 +208,7 @@ class Exporter:
 
         os.makedirs("data", exist_ok=True)
         
-        for filename, node_list, title in [
+        for filename, node_list, title in[
             (f"sub_all{suffix}.txt", nodes, "Scarlet Devil | Gungnir (MIX)"),
             (f"sub_bs{suffix}.txt", nodes_bs, "Scarlet Devil | Nightbird (БС)"),
             (f"sub_chs{suffix}.txt", nodes_chs, "Scarlet Devil | Vampire Dash (ЧС)"),
@@ -226,7 +228,7 @@ class Exporter:
             "top_speed": top_speed,
             "duration": duration,
             "l4_dropped": l4_dropped,
-            "dead_sources": list(dead_sources) if dead_sources else []
+            "dead_sources": list(dead_sources) if dead_sources else[]
         }
         
         try:
