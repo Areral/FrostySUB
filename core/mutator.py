@@ -1,5 +1,4 @@
 from typing import List
-from loguru import logger
 from core.models import ProxyNode
 
 #Движок самолечения конфигураций
@@ -8,7 +7,7 @@ class NodeMutator:
 
     @staticmethod
     def mutate(node: ProxyNode) -> List[ProxyNode]:
-        mutations =[node]
+        mutations = [node]
         c = node.config
 
         if c.alpn and "h2" in c.alpn:
@@ -22,8 +21,5 @@ class NodeMutator:
             m2.config.fp = "chrome"
             m2.config.raw_meta["mutated"] = "fp_stabilize"
             mutations.append(m2)
-
-        if len(mutations) > 1:
-            logger.debug(f"Mutator: Создано {len(mutations)-1} клонов-мутантов для {node.machine_id}")
 
         return mutations
