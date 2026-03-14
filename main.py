@@ -18,14 +18,12 @@ async def main():
 
     shard_index = int(os.environ.get("SHARD_INDEX", "0"))
     shard_count = int(os.environ.get("SHARD_COUNT", "1"))
-    logger.info(f"🦇 Активация Матричного Дрона[{shard_index + 1} / {shard_count}]")
+    logger.info(f"🦇 Активация Матричного Дрона [{shard_index + 1} / {shard_count}]")
     logger.info("==================================================================")
 
     try:
-        logger.info("➤ [ФАЗА 1/6]: Инициализация системных баз данных ТСПУ")
         await RKNValidator.load_lists()
 
-        logger.info("➤ [ФАЗА 2/6]: Запуск асинхронного скрейпинга")
         parser = LinkParser()
         nodes = await parser.fetch_and_parse()
 
@@ -41,28 +39,25 @@ async def main():
             nodes = nodes[start_idx:end_idx]
             logger.info(f"⛨ Зона ответственности передана Дрону: {len(nodes)} узлов")
             
-        logger.info("➤[ФАЗА 3/6]: Старт глубокой инспекции ANGRA (L4/L7)")
         inspector = Inspector()
         alive_nodes = await inspector.process_all(nodes)
         l4_dropped = inspector.l4_dropped
         
-        logger.info("➤ [ФАЗА 4/6]: Агрегация метрик и источников")
+        logger.info("► [АГРЕГАЦИЯ]: Подсчет метрик и источников...")
         for node in alive_nodes:
             if node.source_url in parser.metrics:
                 parser.metrics[node.source_url]["alive"] = parser.metrics[node.source_url].get("alive", 0) + 1
 
         dead_sources =[url for url, m in parser.metrics.items() if m.get("parsed", 0) > 0 and m.get("alive", 0) == 0]
         
-        logger.info("➤[ФАЗА 5/6]: Строгая дедупликация")
         unique_alive = {}
         for n in alive_nodes:
             unique_alive[n.strict_id] = n
         alive_nodes = list(unique_alive.values())
-        logger.info(f"✔ Выжило узлов после дедупликации: {len(alive_nodes)}")
+        logger.info(f"✔ [ДЕДУПЛИКАЦИЯ]: Выжило уникальных узлов: {len(alive_nodes)}")
 
         duration = time.perf_counter() - start_time
         
-        logger.info("➤ [ФАЗА 6/6]: Генерация артефактов и сохранение")
         Exporter.save_files(
             alive_nodes, 
             shard_index=shard_index if shard_count > 1 else -1,
