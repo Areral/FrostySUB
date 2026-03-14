@@ -469,8 +469,6 @@ class LinkParser:
             return ""
 
     async def fetch_and_parse(self) -> List[ProxyNode]:
-        from core.mutator import NodeMutator
-
         max_accounts_per_server = CONFIG.parser.get("max_accounts_per_server", 5)
         raw_sources = CONFIG.SUBSCRIPTION_SOURCES
         if not raw_sources: 
@@ -498,6 +496,8 @@ class LinkParser:
         seen_ids: set = set()
         machine_counts: dict = {}
         
+        parsed_total = 0
+        
         for i, content in enumerate(results):
             if not content: continue
             url = sources[i]
@@ -521,6 +521,8 @@ class LinkParser:
                         break
                 
                 if node:
+                    parsed_total += 1
+                    
                     if node.protocol in ("vless", "vmess", "trojan"):
                         if node.config.security in ("none", "") and node.config.type not in ("ws", "httpupgrade", "xhttp"):
                             continue
@@ -532,13 +534,13 @@ class LinkParser:
                             node.source_url = url
                             node.is_bs = RKNValidator.check_bs(node)
                             
-                            mutated_nodes = NodeMutator.mutate(node)
-                            for m_node in mutated_nodes:
-                                if m_node.strict_id not in seen_ids:
-                                    nodes.append(m_node)
-                                    seen_ids.add(m_node.strict_id)
+                            nodes.append(node)
+                            seen_ids.add(node.strict_id)
 
                             machine_counts[m_id] = machine_counts.get(m_id, 0) + 1
+                            
+                    if parsed_total % 15000 == 0:
+                        logger.info(f"► [ПАРСИНГ]: Извлечено {parsed_total} объектов... [██████░░░░]")
 
-        logger.info(f"► [ПАРСИНГ]: Собрано сырых узлов (включая мутации): {len(nodes)}")
+        logger.info(f"✔ [ПАРСИНГ]: Завершено. Собрано оригинальных узлов: {len(nodes)}")
         return nodes
