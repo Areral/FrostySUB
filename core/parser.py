@@ -455,7 +455,6 @@ class LinkParser:
                     async with session.get(url, timeout=timeout) as resp:
                         if resp.status == 200:
                             content = await resp.text(errors='ignore')
-                            logger.debug(f"[FETCH] Успешно ({len(content)} байт) -> {url}")
                             return content
                         if resp.status == 429:
                             if attempt < retries - 1:
@@ -472,23 +471,16 @@ class LinkParser:
     async def fetch_and_parse(self) -> List[ProxyNode]:
         from core.mutator import NodeMutator
 
-        logger.info("⚔ Запуск Ритуала Извлечения (Global Scraping Protocol)")
-        nodes: List[ProxyNode] =[]
-        seen_ids: set = set()
-        machine_counts: dict = {}
-        
         max_accounts_per_server = CONFIG.parser.get("max_accounts_per_server", 5)
         raw_sources = CONFIG.SUBSCRIPTION_SOURCES
         if not raw_sources: 
-            logger.error("✘ КРИТИЧЕСКИЙ СБОЙ: Источники подписок (SUBSCRIPTION_SOURCES) не найдены!")
-            return[]
+            return []
 
         if isinstance(raw_sources, list):
             sources = list(dict.fromkeys(s.strip() for s in raw_sources if s.strip()))
         else:
             sources = list(dict.fromkeys(s.strip() for s in raw_sources.splitlines() if s.strip()))
 
-        logger.info(f"⭳ Инициация загрузки из {len(sources)} матричных узлов...")
         connector = aiohttp.TCPConnector(limit=15, ttl_dns_cache=300)
         async with aiohttp.ClientSession(connector=connector) as session:
             results = await asyncio.gather(*[self._fetch_url_with_retry(session, url) for url in sources])
@@ -502,7 +494,9 @@ class LinkParser:
             "hysteria2://": self.parse_hy2,
         }
 
-        logger.info("⚙ Дешифровка Base64 и санитария узлов...")
+        nodes: List[ProxyNode] = []
+        seen_ids: set = set()
+        machine_counts: dict = {}
         
         for i, content in enumerate(results):
             if not content: continue
@@ -546,5 +540,5 @@ class LinkParser:
 
                             machine_counts[m_id] = machine_counts.get(m_id, 0) + 1
 
-        logger.info(f"✔ Ритуал завершен. Собрано сырых узлов-кандидатов: {len(nodes)}")
+        logger.info(f"► [ПАРСИНГ]: Собрано сырых узлов (включая мутации): {len(nodes)}")
         return nodes
