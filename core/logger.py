@@ -1,5 +1,8 @@
 import sys
+import os
 from loguru import logger
+
+os.makedirs("data", exist_ok=True)
 
 logger.remove()
 
