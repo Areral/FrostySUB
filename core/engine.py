@@ -699,7 +699,10 @@ class Inspector:
                         fut = asyncio.open_connection(clean_sni, 443)
                         _, w = await asyncio.wait_for(fut, timeout=2.0)
                         w.close()
-                        try: await w.wait_closed() except: pass
+                        try:
+                            await w.wait_closed()
+                        except Exception:
+                            pass
                         Inspector._SNI_CACHE[clean_sni] = True
                     except Exception:
                         Inspector._SNI_CACHE[clean_sni] = False
